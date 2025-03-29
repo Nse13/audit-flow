@@ -1,5 +1,8 @@
 streamlit
 pandas
-openpyxl
 PyMuPDF
 fpdf
+pytesseract
+Pillow
+openai
+langdetect
