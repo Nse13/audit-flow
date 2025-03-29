@@ -1,0 +1,7 @@
+streamlit
+pandas
+PyMuPDF
+langdetect
+fpdf
+openai
+plotly
