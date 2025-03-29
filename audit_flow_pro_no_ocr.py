@@ -24,7 +24,7 @@ def parse_financial_data(text):
     matches = re.findall(r"(RICAVI|COSTI|UTILE|EBITDA|CASH FLOW|DEBITI|PATRIMONIO|ATTIVO|INTERESSI):[ ]?EUR?[ ]?([\d.,]+)", text.upper())
     return {k: float(v.replace(".", "").replace(",", "")) for k, v in matches}
 
-def calculate_kpi(data):
+def calculate_kpi(data):  # <-- la funzione che ti manca
     kpi = {}
     try:
         kpi["ROE"] = round(data["UTILE"] / data["PATRIMONIO"] * 100, 2)
