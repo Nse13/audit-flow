@@ -54,7 +54,7 @@ def generate_pdf(data, kpi, summary):
     pdf.set_font("Arial", size=12)
     pdf.cell(0, 10, "Report Audit Flow Pro+", ln=True)
     pdf.multi_cell(0, 10, f"Dati finanziari: {data}\nKPI: {kpi}\nCommento AI: {summary}")
-    output = "/mnt/data/audit_flow_report_final.pdf"
+    output = "audit_flow_report_final.pdf"  # Modifica qui!
     pdf.output(output)
     return output
 
