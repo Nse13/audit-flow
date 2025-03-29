@@ -37,9 +37,19 @@ def calculate_kpi(data):
     return kpi
 
 def gpt_summary(data, kpi, api_key):
-    openai.api_key = api_key
+    client = openai.OpenAI(api_key=api_key)
+
     prompt = f"Sintesi audit:\nDati: {data}\nKPI: {kpi}\nSintesi professionale in italiano."
-    return openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}], max_tokens=200).choices[0].message["content"]
+
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=200,
+        temperature=0.4
+    )
+
+    return response.choices[0].message.content
+
 
 def generate_pdf(data, kpi, summary):
     pdf = FPDF()
