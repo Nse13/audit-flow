@@ -1,8 +1,6 @@
-
 import streamlit as st
 import pandas as pd
 import fitz
-import langdetect
 import re
 import io
 from fpdf import FPDF
@@ -26,16 +24,15 @@ def parse_financial_data(text):
     matches = re.findall(r"(RICAVI|COSTI|UTILE|EBITDA|CASH FLOW|DEBITI|PATRIMONIO|ATTIVO|INTERESSI):[ ]?EUR?[ ]?([\d.,]+)", text.upper())
     return {k: float(v.replace(".", "").replace(",", "")) for k, v in matches}
 
-if api_key:
-    summary = gpt_summary(data, kpi, api_key)
-else:
-    summary = "API key non inserita: commento automatico non disponibile."
-
-st.success(summary)
-pdf_path = generate_pdf(data, kpi, summary)
-with open(pdf_path, "rb") as f:
-    st.download_button("📥 Scarica Report", f, "AuditFlow_Report.pdf")
-
+def calculate_kpi(data):
+    kpi = {}
+    try:
+        kpi["ROE"] = round(data["UTILE"] / data["PATRIMONIO"] * 100, 2)
+        kpi["ROI"] = round(data["UTILE"] / data["ATTIVO"] * 100, 2)
+        kpi["Margine Netto"] = round(data["UTILE"] / data["RICAVI"] * 100, 2)
+    except:
+        pass
+    return kpi
 
 def gpt_summary(data, kpi, api_key):
     client = openai.OpenAI(api_key=api_key)
@@ -51,7 +48,6 @@ def gpt_summary(data, kpi, api_key):
 
     return response.choices[0].message.content
 
-
 def generate_pdf(data, kpi, summary):
     pdf = FPDF()
     pdf.add_page()
@@ -64,6 +60,7 @@ def generate_pdf(data, kpi, summary):
 
 if uploaded_file:
     bytes_file = uploaded_file.read()
+
     if uploaded_file.name.endswith(".pdf"):
         text = extract_text(bytes_file)
         st.text_area("Testo Estratto", text, height=250)
@@ -76,13 +73,15 @@ if uploaded_file:
 
         if api_key:
             summary = gpt_summary(data, kpi, api_key)
-            st.success(summary)
-            pdf_path = generate_pdf(data, kpi, summary)
-            with open(pdf_path, "rb") as f:
-                st.download_button("📥 Scarica Report", f, "AuditFlow_Report.pdf")
         else:
-            st.warning("Inserisci API key OpenAI per generare il report completo.")
+            summary = "API key non inserita: commento automatico non disponibile."
+
+        st.success(summary)
+        pdf_path = generate_pdf(data, kpi, summary)
+        with open(pdf_path, "rb") as f:
+            st.download_button("📥 Scarica Report", f, "AuditFlow_Report.pdf")
 
     elif uploaded_file.name.endswith((".xlsx", ".xls")):
         df = pd.read_excel(io.BytesIO(bytes_file))
         st.dataframe(df)
+
