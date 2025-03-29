@@ -70,7 +70,11 @@ def calculate_kpi(data):
 
 def gpt_summary(data, kpi, lang, api_key):
     client = openai.OpenAI(api_key=api_key)
-    testo = f"Dati:
+    testo = (
+    f"Dati:\n{data}\n\n"
+    f"KPI:\n{kpi}\n\n"
+)
+
 {data}
 
 KPI:
