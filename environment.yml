@@ -1,0 +1,16 @@
+
+name: auditflow_env
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - streamlit
+    - pandas
+    - numpy
+    - plotly
+    - pytesseract
+    - fpdf
+    - Pillow
+    - PyMuPDF
