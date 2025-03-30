@@ -1,0 +1,126 @@
+
+import streamlit as st
+import pandas as pd
+import fitz
+import io
+import langdetect
+from fpdf import FPDF
+import re
+import plotly.express as px
+from openai import OpenAI
+import json
+
+
+st.set_page_config(
+    page_title="Audit Flow Pro+",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+st.image("/mnt/data/logo_auditflow.png", width=300)
+page_title="Audit Flow Pro+ (no GPT)", layout="wide")
+st.title("Audit Flow Pro+ (senza GPT)")
+st.subheader("Analisi finanziaria da PDF/Excel/CSV anche senza intelligenza artificiale")
+
+uploaded_file = st.sidebar.file_uploader("📂 Carica un bilancio", type=["pdf", "xlsx", "xls", "csv"])
+api_key = st.sidebar.text_input("🔐 API key OpenAI (facoltativa)", type="password")
+
+def extract_text(pdf_bytes):
+    text = ""
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        for page in doc:
+            text += page.get_text()
+    return text
+
+def detect_language(text):
+    try:
+        return "it" if langdetect.detect(text) == "it" else "en"
+    except:
+        return "en"
+
+def parse_data_from_text(text):
+    pattern = re.compile(r"(Revenue|Net Income|Total Assets|Equity|EBITDA|Cash Flow|Operating Costs|Total Debts)[^\d]*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)", re.IGNORECASE)
+    matches = pattern.findall(text)
+    data = {}
+    for label, value in matches:
+        label = label.title().strip()
+        value = value.replace(".", "").replace(",", "")
+        try:
+            data[label] = float(value)
+        except:
+            continue
+    return pd.DataFrame([data], index=["2023"]) if data else pd.DataFrame()
+
+def calculate_kpi(df):
+    df_out = df.copy()
+    try: df_out['ROE (%)'] = (df['Net Income'] / df['Equity']) * 100
+    except: pass
+    try: df_out['ROI (%)'] = (df['Net Income'] / df['Total Assets']) * 100
+    except: pass
+    try: df_out['Net Margin (%)'] = (df['Net Income'] / df['Revenue']) * 100
+    except: pass
+    try: df_out['Debt to Equity'] = df['Total Debts'] / df['Equity']
+    except: pass
+    try: df_out['EBITDA Margin (%)'] = df['EBITDA'] / df['Revenue'] * 100
+    except: pass
+    return df_out
+
+def show_dashboard(df):
+    st.subheader("📊 Dashboard KPI Interattiva")
+    for col in df.columns:
+        if df[col].dtype in ['float64', 'int64'] and df[col].notna().all():
+            fig = px.bar(df.reset_index(), x=df.index.name or "Index", y=col, title=col)
+            st.plotly_chart(fig, use_container_width=True)
+
+def generate_pdf(df):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(0, 10, "Audit Flow Pro+ Report", ln=True)
+    for year, row in df.iterrows():
+        pdf.multi_cell(0, 10, f"{year}: {row.to_dict()}")
+    path = "/mnt/data/auditflow_report_local.pdf"
+    pdf.output(path)
+    return path
+
+if uploaded_file:
+    file_name = uploaded_file.name
+    if file_name.endswith(".pdf"):
+        text = extract_text(uploaded_file.read())
+        lang = detect_language(text)
+        st.write(f"📘 Lingua rilevata: {'Italiano' if lang == 'it' else 'English'}")
+        st.text_area("📄 Testo Estratto", text, height=300)
+        df = parse_data_from_text(text)
+    elif file_name.endswith((".xlsx", ".xls")):
+        df = pd.read_excel(uploaded_file)
+    elif file_name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    else:
+        st.stop()
+
+    if not df.empty:
+        df.index.name = "Year"
+        st.subheader("📑 Dati estratti o caricati")
+        st.dataframe(df)
+
+        df = calculate_kpi(df)
+        st.subheader("📈 KPI calcolati")
+        st.dataframe(df)
+
+        show_dashboard(df)
+
+        pdf_path = generate_pdf(df)
+        with open(pdf_path, "rb") as f:
+            st.download_button("📥 Scarica il report PDF", f, file_name="auditflow_report_local.pdf")
+    else:
+        st.warning("⚠️ Nessun dato disponibile da analizzare.")
+else:
+    st.info("Carica un file per iniziare.")
+
+
+st.markdown("---")
+with st.expander("📬 Contattaci / Richiedi supporto"):
+    st.write("Hai bisogno di aiuto o vuoi una versione personalizzata?")
+    st.markdown("📧 Email: [info@auditflowpro.com](mailto:info@auditflowpro.com)")
+    st.markdown("🌐 Sito: [www.auditflowpro.com](https://www.auditflowpro.com)")
