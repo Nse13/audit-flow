@@ -6,3 +6,7 @@ fpdf
 plotly
 openai
 openpyxl
+pytesseract
+Pillow
+
+
