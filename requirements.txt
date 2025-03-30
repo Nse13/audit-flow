@@ -4,3 +4,4 @@ PyMuPDF
 langdetect
 fpdf
 plotly
+openai>=1.0
