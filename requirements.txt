@@ -1,7 +1,0 @@
-streamlit
-pandas
-PyMuPDF
-langdetect
-fpdf
-openai>=1.0
-plotly
