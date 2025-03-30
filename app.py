@@ -104,7 +104,7 @@ def generate_pdf(df):
     pdf.cell(0, 10, "Audit Flow Pro+ Report", ln=True)
     for year, row in df.iterrows():
         pdf.multi_cell(0, 10, f"{year}: {row.to_dict()}")
-    path = "/mnt/data/auditflow_report_hybrid.pdf"
+    path = "auditflow_report_hybrid.pdf"
     pdf.output(path)
     return path
 
