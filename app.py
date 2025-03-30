@@ -19,7 +19,6 @@ st.set_page_config(
 )
 
 st.image("/mnt/data/logo_auditflow.png", width=300)
-page_title="Audit Flow Pro+ (no GPT)", layout="wide")
 st.title("Audit Flow Pro+ (senza GPT)")
 st.subheader("Analisi finanziaria da PDF/Excel/CSV anche senza intelligenza artificiale")
 
