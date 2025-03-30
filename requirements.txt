@@ -5,3 +5,4 @@ langdetect
 fpdf
 plotly
 openai
+openpyxl
