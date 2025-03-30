@@ -1,0 +1,9 @@
+streamlit
+pandas
+plotly
+fpdf
+pytesseract
+Pillow
+PyMuPDF
+scikit-learn
+openai
