@@ -1,0 +1,9 @@
+streamlit
+pandas
+scikit-learn
+plotly
+openpyxl
+fpdf
+langdetect
+PyMuPDF
+pytesseract
