@@ -1,0 +1,11 @@
+streamlit
+pandas
+plotly
+pytesseract
+langdetect
+fpdf
+openai
+PyMuPDF
+joblib
+pillow
+openpyxl
