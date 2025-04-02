@@ -1,0 +1,37 @@
+[
+  {
+    "codice": "OIC_01",
+    "descrizione": "Fattura attiva",
+    "categoria": "Vendite"
+  },
+  {
+    "codice": "OIC_02",
+    "descrizione": "Fattura passiva",
+    "categoria": "Acquisti"
+  },
+  {
+    "codice": "IAS_02",
+    "descrizione": "Svalutazione magazzino",
+    "categoria": "Magazzino"
+  },
+  {
+    "codice": "IAS_16",
+    "descrizione": "Ammortamento immobilizzazioni",
+    "categoria": "Immobilizzazioni"
+  },
+  {
+    "codice": "IFRS_15",
+    "descrizione": "Riconoscimento ricavi",
+    "categoria": "Ricavi"
+  },
+  {
+    "codice": "IFRS_16",
+    "descrizione": "Leasing",
+    "categoria": "Finanziamenti"
+  },
+  {
+    "codice": "IFRS_9",
+    "descrizione": "Strumenti finanziari derivati",
+    "categoria": "Finanziari"
+  }
+]

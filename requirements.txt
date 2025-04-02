@@ -1,11 +1,1 @@
-streamlit
-pandas
-plotly
-pytesseract
-langdetect
-fpdf
-openai
-PyMuPDF
-joblib
-pillow
-openpyxl
+# Nessuna libreria esterna necessaria
