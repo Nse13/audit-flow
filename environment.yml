@@ -1,0 +1,17 @@
+name: auditflow_env
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - streamlit
+    - pandas
+    - plotly
+    - PyMuPDF
+    - openai
+    - langdetect
+    - fpdf
+    - matplotlib
+    - scikit-learn
+    - openpyxl

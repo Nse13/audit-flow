@@ -1,0 +1,1 @@
+# Funzioni di utility per l'estrazione e calcoli KPI (già definite precedentemente)

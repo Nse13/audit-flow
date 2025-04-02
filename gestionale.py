@@ -1,0 +1,1 @@
+# Modulo contabile gestionale avanzato (inclusivo IAS/IFRS/OIC)
