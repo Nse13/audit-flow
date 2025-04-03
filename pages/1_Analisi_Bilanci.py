@@ -1,4 +1,8 @@
 import streamlit as st
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from utils import extract_financial_data, calculate_kpis, plot_kpis
 
 st.title("📊 Analisi Bilanci")
@@ -20,10 +24,4 @@ if uploaded_file:
     kpis = calculate_kpis(data)
     st.dataframe(kpis)
 
-    st.subheader("📊 Grafico KPI")
-    fig = plot_kpis(kpis)
-    st.plotly_chart(fig)
-
-    if debug_info:
-        with st.expander("🔍 Debug Estrazione"):
-            st.write(debug_info)
+    st.subheader("📊 Grafico
