@@ -1,4 +1,4 @@
 import streamlit as st
 
-st.title("📂 Movimenti Gestionali")
-st.write("Carica fatture, movimenti bancari, cassa e gestisci le scritture contabili.")
+st.title("📈 Report & KPI")
+st.write("Qui visualizzerai i risultati dell'analisi, KPI e alert automatici.")
