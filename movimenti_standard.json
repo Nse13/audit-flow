@@ -1,0 +1,12 @@
+[
+  {
+    "codice": "OIC_01",
+    "descrizione": "Fattura attiva",
+    "categoria": "Vendite"
+  },
+  {
+    "codice": "IAS_02",
+    "descrizione": "Svalutazione magazzino",
+    "categoria": "Magazzino"
+  }
+]

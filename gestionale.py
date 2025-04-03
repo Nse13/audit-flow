@@ -1,0 +1,1 @@
+# Modulo per la gestione dei movimenti contabili OIC/IAS/IFRS

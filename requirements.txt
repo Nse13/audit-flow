@@ -1,10 +1,7 @@
 streamlit
 pandas
-plotly
-PyMuPDF
-openai
-langdetect
-fpdf
-matplotlib
-scikit-learn
 openpyxl
+PyMuPDF
+reportlab
+openai
+plotly

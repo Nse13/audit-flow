@@ -1,0 +1,1 @@
+# Funzioni di supporto per estrazioni, calcoli, GPT, esportazioni, ecc.
