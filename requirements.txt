@@ -5,7 +5,5 @@ PyMuPDF
 reportlab
 openai
 plotly
-fpdf
-matplotlib
-scikit-learn
-langdetect
+pytesseract
+Pillow
