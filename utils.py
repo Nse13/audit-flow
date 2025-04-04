@@ -7,17 +7,16 @@ from reportlab.pdfgen import canvas
 import openai
 import os
 
-# 1. Estrazione dati
 def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
 
-    if file_path.endswith(".pdf"):
+    if file_path.endswith(".pdf") or file_path.endswith(".txt"):
         with fitz.open(file_path) as doc:
             text = ""
             for page in doc:
                 text += page.get_text()
-            debug_info["tipo_file"] = "PDF"
+            debug_info["tipo_file"] = "PDF/TXT"
             debug_info["estratto"] = text[:1000]
             data = {
                 "Ricavi": 120000,
@@ -44,7 +43,6 @@ def extract_financial_data(file_path, return_debug=False):
 
     return (data, debug_info) if return_debug else data
 
-# 2. Calcolo KPI
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
@@ -61,14 +59,12 @@ def calculate_kpis(data):
     }
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
-# 3. Grafico KPI
 def plot_kpis(df_kpis):
     fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
     fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
     fig.update_layout(yaxis_title="Valore (%)", xaxis_title="", showlegend=False)
     return fig
 
-# 4. GPT Comment (opzionale)
 def generate_gpt_comment(data):
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
@@ -91,7 +87,6 @@ def generate_gpt_comment(data):
     except Exception as e:
         return f"Errore GPT: {e}"
 
-# 5. PDF Report
 def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.pdf"):
     c = canvas.Canvas(filename, pagesize=A4)
     width, height = A4
