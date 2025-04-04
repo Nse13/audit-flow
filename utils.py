@@ -78,7 +78,9 @@ def extract_with_keywords(text):
         "Patrimonio Netto": find_val("Patrimonio Netto")
     }
 
-# 3. GPT (opzionale)
+from dotenv import load_dotenv
+load_dotenv()  # Carica le variabili dal file .env
+
 def extract_with_gpt(text):
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
