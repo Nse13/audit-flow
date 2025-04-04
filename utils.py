@@ -2,17 +2,22 @@ import fitz  # PyMuPDF
 import pandas as pd
 import openai
 import os
-import pytesseract
-from PIL import Image
-import io
 import plotly.express as px
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-# SOLO per Windows – aggiorna il percorso se Tesseract è installato altrove:
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# Prova a importare OCR solo se disponibile
+OCR_AVAILABLE = False
+try:
+    import pytesseract
+    from PIL import Image
+    import io
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    OCR_AVAILABLE = True
+except ImportError:
+    pass
 
-# 🔍 1. Estrazione dei dati
+# 1. Estrazione dati da PDF o Excel
 def extract_financial_data(file_path, return_debug=False, use_gpt=False):
     debug_info = {}
     data = {}
@@ -24,14 +29,12 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
                 page_text = page.get_text().strip()
                 if page_text:
                     text += page_text
-                else:
-                    # OCR se la pagina è un'immagine
+                elif OCR_AVAILABLE:
                     pix = page.get_pixmap()
                     img = Image.open(io.BytesIO(pix.tobytes()))
-                    ocr_text = pytesseract.image_to_string(img, lang="ita")
-                    text += ocr_text
-
+                    text += pytesseract.image_to_string(img, lang="ita")
         debug_info["estratto"] = text[:1000]
+
         if use_gpt:
             data = extract_with_gpt(text)
         else:
@@ -54,7 +57,7 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
 
     return (data, debug_info) if return_debug else data
 
-# 🔍 2. Estrazione base da testo senza GPT
+# 2. Estrazione testuale semplice
 def extract_with_keywords(text):
     import re
     def find_val(keyword):
@@ -75,7 +78,7 @@ def extract_with_keywords(text):
         "Patrimonio Netto": find_val("Patrimonio Netto")
     }
 
-# 🔍 3. Estrazione con GPT
+# 3. GPT (opzionale)
 def extract_with_gpt(text):
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
@@ -104,11 +107,11 @@ Rispondi solo con il JSON puro.
             max_tokens=300
         )
         content = response.choices[0].message["content"]
-        return eval(content)  # ⚠️ solo se controlli l’output GPT!
+        return eval(content)
     except Exception as e:
         return {"errore GPT": str(e)}
 
-# 📊 4. Calcolo KPI
+# 4. Calcolo KPI
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
@@ -125,14 +128,14 @@ def calculate_kpis(data):
     }
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
-# 📈 5. Grafico KPI
+# 5. Grafico KPI
 def plot_kpis(df_kpis):
     fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
     fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
     fig.update_layout(yaxis_title="Valore (%)", xaxis_title="", showlegend=False)
     return fig
 
-# 📝 6. Report PDF
+# 6. Genera PDF
 def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.pdf"):
     c = canvas.Canvas(filename, pagesize=A4)
     width, height = A4
