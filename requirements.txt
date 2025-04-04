@@ -7,3 +7,4 @@ openai
 plotly
 pytesseract
 Pillow
+python-dotenv
