@@ -2,11 +2,19 @@
   {
     "codice": "OIC_01",
     "descrizione": "Fattura attiva",
-    "categoria": "Vendite"
+    "categoria": "Vendite",
+    "standard": "OIC"
   },
   {
     "codice": "IAS_02",
     "descrizione": "Svalutazione magazzino",
-    "categoria": "Magazzino"
+    "categoria": "Magazzino",
+    "standard": "IAS"
+  },
+  {
+    "codice": "IFRS_15",
+    "descrizione": "Riconoscimento ricavi",
+    "categoria": "Ricavi",
+    "standard": "IFRS"
   }
 ]
