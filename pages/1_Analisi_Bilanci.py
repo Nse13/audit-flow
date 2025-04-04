@@ -1,21 +1,24 @@
 import streamlit as st
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import tempfile
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils import extract_financial_data, calculate_kpis, plot_kpis
 
 st.title("📊 Analisi Bilanci")
-st.write("Carica un bilancio PDF o Excel per analisi automatica.")
+st.write("Carica un file PDF, Excel o TXT per estrarre automaticamente i dati finanziari.")
 
-uploaded_file = st.file_uploader("📁 Carica un bilancio", type=["pdf", "xlsx"])
+uploaded_file = st.file_uploader("📁 Carica bilancio", type=["pdf", "xlsx", "xls", "txt"])
 
 if uploaded_file:
-    with open("temp_uploaded_file", "wb") as f:
-        f.write(uploaded_file.read())
+    suffix = "." + uploaded_file.name.split(".")[-1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(uploaded_file.read())
+        file_path = tmp.name
 
     with st.spinner("Estrazione e analisi in corso..."):
-        data, debug_info = extract_financial_data("temp_uploaded_file", return_debug=True)
+        data, debug_info = extract_financial_data(file_path, return_debug=True)
 
     st.subheader("📄 Dati estratti")
     st.json(data)
@@ -28,6 +31,6 @@ if uploaded_file:
     fig = plot_kpis(kpis)
     st.plotly_chart(fig)
 
-    if debug_info:
-        with st.expander("🔍 Debug Estrazione"):
-            st.write(debug_info)
+    with st.expander("🔍 Debug Estrazione"):
+        st.write(debug_info)
+
