@@ -8,16 +8,7 @@ materialita_relativa = st.slider("Materialità Relativa (%)", 0.5, 10.0, 2.0, st
 materialita_assoluta = st.number_input("Materialità Assoluta (€)", min_value=0.0, step=1000.0, value=10000.0)
 
 st.subheader("⚠️ Aree a Rischio Maggiore")
-aree = [
-    "Ricavi",
-    "Crediti commerciali",
-    "Magazzino",
-    "Costi anticipati",
-    "Immobilizzazioni",
-    "Debiti vs fornitori",
-    "Personale",
-    "Leasing"
-]
+aree = ["Ricavi", "Crediti commerciali", "Magazzino", "Costi anticipati", "Immobilizzazioni", "Debiti vs fornitori", "Personale", "Leasing"]
 aree_selezionate = st.multiselect("Seleziona le aree da approfondire", aree)
 
 st.subheader("📝 Note di Pianificazione")
