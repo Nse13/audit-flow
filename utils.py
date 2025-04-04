@@ -62,25 +62,90 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
     return (data, debug_info) if return_debug else data
 
 # 🔍 2. Estrazione base da testo (senza GPT)
-def extract_with_keywords(text):
-    import re
-    def find_val(keyword):
-        match = re.search(rf"{keyword}[\s:€]*([\d\.,]+)", text, re.IGNORECASE)
-        if match:
-            val = match.group(1).replace(".", "").replace(",", ".")
-            try:
-                return float(val)
-            except:
-                return 0.0
-        return 0.0
+import re
 
-    return {
-        "Ricavi": find_val("Ricavi"),
-        "Costi": find_val("Costi"),
-        "Utile Netto": find_val("Utile Netto"),
-        "Totale Attivo": find_val("Totale Attivo"),
-        "Patrimonio Netto": find_val("Patrimonio Netto")
-    }
+def smart_extract_value(keyword, synonyms, text):
+    """
+    Cerca nel testo il valore numerico più probabile associato alla keyword o ai suoi sinonimi,
+    usando un sistema di scoring su più criteri.
+    """
+    candidates = []
+    lines = text.split("\n")
+    all_terms = [keyword.lower()] + [s.lower() for s in synonyms]
+
+    for i, line in enumerate(lines):
+        clean_line = line.strip()
+        line_lower = clean_line.lower()
+
+        # Criterio 1: contiene la keyword o un sinonimo
+        found_term = next((term for term in all_terms if term in line_lower), None)
+        if not found_term:
+            continue
+
+        # Criterio 2: estrai tutti i numeri nella riga
+        numbers = re.findall(r"[-+]?\d[\d.,]*", clean_line)
+        for num_str in numbers:
+            try:
+                val = float(num_str.replace(".", "").replace(",", "."))
+            except:
+                continue
+
+            score = 0
+
+            # +3: match esatto con keyword
+            if keyword.lower() in line_lower:
+                score += 3
+
+            # +2: sinonimo riconosciuto
+            if found_term != keyword.lower():
+                score += 2
+
+            # +1: solo una keyword nella riga
+            if sum(term in line_lower for term in all_terms) == 1:
+                score += 1
+
+            # +2: numero vicino alla keyword (<25 caratteri)
+            if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25:
+                score += 2
+
+            # +1: contiene "€" o due zeri
+            if "€" in clean_line or ".00" in num_str or ",00" in num_str:
+                score += 1
+
+            # +1: valore realistico
+            if 1_000 <= val <= 10_000_000_000:
+                score += 1
+
+            # +1: posizione strategica (inizio o fine documento)
+            if i < 15 or i > len(lines) - 15:
+                score += 1
+
+            # +1: contiene ":" o tabulazione
+            if ":" in clean_line or "\t" in clean_line:
+                score += 1
+
+            # +2: presenza di "totale"
+            if "totale" in line_lower:
+                score += 2
+
+            # +1: segno negativo e parola come "costi" o "perdita"
+            if val < 0 and any(term in line_lower for term in ["costo", "perdita", "oneri"]):
+                score += 1
+
+            # -1: la keyword è molto ricorrente nel documento (rumore)
+            if sum(term in text.lower() for term in all_terms) > 4:
+                score -= 1
+
+            candidates.append({
+                "term": found_term,
+                "valore": val,
+                "score": score,
+                "riga": clean_line
+            })
+
+    # Ordina per punteggio
+    best = sorted(candidates, key=lambda x: x["score"], reverse=True)
+    return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
 
 # 🤖 3. Estrazione GPT (nuova sintassi OpenAI)
 def extract_with_gpt(text):
