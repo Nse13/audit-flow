@@ -27,3 +27,4 @@ st.markdown("""
 
 👈 Se non vedi il menu laterale, clicca sull’icona in alto a sinistra.
 """)
+
