@@ -1,4 +1,3 @@
-# Modulo per la gestione dei movimenti contabili OIC/IAS/IFRS
 from datetime import datetime
 import json
 from typing import List
@@ -47,16 +46,3 @@ class RegistroMovimenti:
             for item in dati:
                 movimento = MovimentoContabile(**item)
                 self.aggiungi_movimento(movimento)
-
-# Esempio di utilizzo
-if __name__ == "__main__":
-    registro = RegistroMovimenti()
-    movimento1 = MovimentoContabile(
-        codice="OIC_01",
-        descrizione="Fattura attiva",
-        categoria="Vendite",
-        data="2025-04-04",
-        importo=1000.0
-    )
-    registro.aggiungi_movimento(movimento1)
-    registro.export_json("movimenti_export.json")
