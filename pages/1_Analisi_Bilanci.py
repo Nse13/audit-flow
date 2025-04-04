@@ -7,9 +7,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils import extract_financial_data, calculate_kpis, plot_kpis
 
 st.title("📊 Analisi Bilanci")
-st.write("Carica un file PDF, Excel o TXT per estrarre automaticamente i dati finanziari.")
+st.write("Carica un file PDF, Excel o TXT per analisi automatica.")
 
-uploaded_file = st.file_uploader("📁 Carica bilancio", type=["pdf", "xlsx", "xls", "txt"])
+uploaded_file = st.file_uploader("📁 Carica un bilancio", type=["pdf", "xlsx", "xls", "txt"])
 
 if uploaded_file:
     suffix = "." + uploaded_file.name.split(".")[-1]
@@ -33,4 +33,3 @@ if uploaded_file:
 
     with st.expander("🔍 Debug Estrazione"):
         st.write(debug_info)
-
