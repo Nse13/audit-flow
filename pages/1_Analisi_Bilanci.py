@@ -24,4 +24,10 @@ if uploaded_file:
     kpis = calculate_kpis(data)
     st.dataframe(kpis)
 
-    st.subheader("📊 Grafico
+    st.subheader("📊 Grafico KPI")
+    fig = plot_kpis(kpis)
+    st.plotly_chart(fig)
+
+    if debug_info:
+        with st.expander("🔍 Debug Estrazione"):
+            st.write(debug_info)
