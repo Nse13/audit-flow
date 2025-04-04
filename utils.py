@@ -1,125 +1,54 @@
 import fitz  # PyMuPDF
 import pandas as pd
-import openpyxl
-import plotly.express as px
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
 import openai
 import os
+import pytesseract
+from PIL import Image
+import io
 
-def extract_financial_data(file_path, return_debug=False):
-    debug_info = {}
-    data = {}
+def extract_financial_data(file_path, use_gpt=False):
+    """
+    Estrae i dati finanziari da un file PDF utilizzando OCR.
+    Se use_gpt è True, utilizza GPT per analizzare il testo estratto.
+    """
+    text = ""
 
-    if file_path.endswith(".pdf") or file_path.endswith(".txt"):
-        with fitz.open(file_path) as doc:
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            debug_info["tipo_file"] = "PDF/TXT"
-            debug_info["estratto"] = text[:1000]
-            data = {
-                "Ricavi": 120000,
-                "Costi": 75000,
-                "Utile Netto": 32000,
-                "Totale Attivo": 190000,
-                "Patrimonio Netto": 95000
-            }
+    # Estrazione del testo dal PDF
+    with fitz.open(file_path) as doc:
+        for page in doc:
+            # Prova a ottenere il testo direttamente
+            page_text = page.get_text()
+            if page_text.strip():
+                text += page_text
+            else:
+                # Se non c'è testo, prova con OCR
+                pix = page.get_pixmap()
+                img = Image.open(io.BytesIO(pix.tobytes()))
+                page_text = pytesseract.image_to_string(img, lang='ita')
+                text += page_text
 
-    elif file_path.endswith((".xlsx", ".xls")):
-        df = pd.read_excel(file_path)
-        debug_info["tipo_file"] = "EXCEL"
-        debug_info["colonne"] = df.columns.tolist()
-        try:
-            data = {
-                "Ricavi": float(df.iloc[0]["Ricavi"]),
-                "Costi": float(df.iloc[0]["Costi"]),
-                "Utile Netto": float(df.iloc[0]["Utile Netto"]),
-                "Totale Attivo": float(df.iloc[0]["Totale Attivo"]),
-                "Patrimonio Netto": float(df.iloc[0]["Patrimonio Netto"])
-            }
-        except Exception as e:
-            debug_info["errore"] = str(e)
-
-    return (data, debug_info) if return_debug else data
-
-def calculate_kpis(data):
-    ricavi = data.get("Ricavi", 0)
-    costi = data.get("Costi", 0)
-    utile = data.get("Utile Netto", 0)
-    attivo = data.get("Totale Attivo", 1)
-    pn = data.get("Patrimonio Netto", 1)
-
-    kpis = {
-        "Margine Operativo (%)": round((ricavi - costi) / ricavi * 100, 2) if ricavi else 0,
-        "Return on Equity (ROE)": round(utile / pn * 100, 2) if pn else 0,
-        "Return on Assets (ROA)": round(utile / attivo * 100, 2) if attivo else 0,
-        "Rapporto Ricavi/Attivo": round(ricavi / attivo, 2) if attivo else 0,
-        "Indice di Efficienza": round(utile / costi * 100, 2) if costi else 0
-    }
-    return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
-
-def plot_kpis(df_kpis):
-    fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
-    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-    fig.update_layout(yaxis_title="Valore (%)", xaxis_title="", showlegend=False)
-    return fig
-
-def generate_gpt_comment(data):
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        return "⚠️ Nessuna API key OpenAI trovata. GPT disattivato."
-
-    prompt = f"Analizza questi dati finanziari:\n{data}\nScrivi un commento professionale di audit."
-
-    openai.api_key = openai_api_key
-    try:
+    if use_gpt:
+        # Analisi del testo con GPT
+        openai.api_key = os.getenv("OPENAI_API_KEY")
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "Sei un revisore contabile professionista."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=300
+                {"role": "system", "content": "Sei un assistente esperto in finanza."},
+                {"role": "user", "content": f"Analizza il seguente testo e estrai i principali dati finanziari:\n{text}"}
+            ]
         )
-        return response['choices'][0]['message']['content'].strip()
-    except Exception as e:
-        return f"Errore GPT: {e}"
+        analysis = response.choices[0].message['content'].strip()
+        return analysis
+    else:
+        # Analisi manuale del testo per estrarre i dati finanziari
+        data = parse_financial_data(text)
+        return data
 
-def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.pdf"):
-    c = canvas.Canvas(filename, pagesize=A4)
-    width, height = A4
-
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(40, height - 50, "Audit Flow+ - Report Analisi")
-
-    c.setFont("Helvetica", 11)
-    y = height - 80
-    for k, v in data.items():
-        c.drawString(40, y, f"{k}: {v}")
-        y -= 18
-
-    y -= 20
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(40, y, "KPI Calcolati:")
-    y -= 20
-    c.setFont("Helvetica", 10)
-    for _, row in df_kpis.iterrows():
-        c.drawString(50, y, f"{row['KPI']}: {row['Valore']}%")
-        y -= 16
-
-    if commento:
-        y -= 30
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(40, y, "Commento GPT:")
-        y -= 20
-        c.setFont("Helvetica", 9)
-        for line in commento.split('\n'):
-            c.drawString(50, y, line)
-            y -= 14
-            if y < 60:
-                c.showPage()
-                y = height - 50
-
-    c.save()
+def parse_financial_data(text):
+    """
+    Analizza manualmente il testo per estrarre i dati finanziari.
+    """
+    data = {}
+    # Implementa qui la logica per analizzare il testo e estrarre i dati finanziari
+    # Ad esempio, puoi cercare pattern specifici nel testo per trovare i valori desiderati
+    return data
