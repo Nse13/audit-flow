@@ -6,18 +6,22 @@ import plotly.express as px
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-# Prova a importare OCR solo se disponibile
+# ✅ Prova a importare OCR se disponibile
 OCR_AVAILABLE = False
 try:
     import pytesseract
     from PIL import Image
     import io
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"  # solo per Windows
     OCR_AVAILABLE = True
 except ImportError:
     pass
 
-# 1. Estrazione dati da PDF o Excel
+# ✅ Inizializza OpenAI client (nuova sintassi >=1.0.0)
+from openai import OpenAI
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+# 📌 1. Estrazione dati da PDF o Excel
 def extract_financial_data(file_path, return_debug=False, use_gpt=False):
     debug_info = {}
     data = {}
@@ -57,7 +61,7 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
 
     return (data, debug_info) if return_debug else data
 
-# 2. Estrazione testuale semplice
+# 🔍 2. Estrazione base da testo (senza GPT)
 def extract_with_keywords(text):
     import re
     def find_val(keyword):
@@ -78,15 +82,10 @@ def extract_with_keywords(text):
         "Patrimonio Netto": find_val("Patrimonio Netto")
     }
 
-openai_api_key = os.environ.get("OPENAI_API_KEY")
-
+# 🤖 3. Estrazione GPT (nuova sintassi OpenAI)
 def extract_with_gpt(text):
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        return {"errore": "⚠️ API Key mancante per OpenAI"}
-
-    openai.api_key = openai_api_key
-    prompt = f"""Hai il seguente testo estratto da un bilancio PDF:
+    try:
+        prompt = f"""Hai il seguente testo estratto da un bilancio PDF:
 {text}
 
 Estrai i valori numerici principali (in euro), nel formato JSON con le seguenti chiavi:
@@ -97,8 +96,7 @@ Estrai i valori numerici principali (in euro), nel formato JSON con le seguenti 
 - Patrimonio Netto
 Rispondi solo con il JSON puro.
 """
-    try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Sei un esperto contabile."},
@@ -107,12 +105,11 @@ Rispondi solo con il JSON puro.
             temperature=0.2,
             max_tokens=300
         )
-        content = response.choices[0].message["content"]
-        return eval(content)
+        return eval(response.choices[0].message.content.strip())
     except Exception as e:
         return {"errore GPT": str(e)}
 
-# 4. Calcolo KPI
+# 📊 4. Calcolo KPI
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
@@ -129,14 +126,14 @@ def calculate_kpis(data):
     }
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
-# 5. Grafico KPI
+# 📈 5. Grafico KPI
 def plot_kpis(df_kpis):
     fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
     fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
     fig.update_layout(yaxis_title="Valore (%)", xaxis_title="", showlegend=False)
     return fig
 
-# 6. Genera PDF
+# 📝 6. Genera PDF report
 def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.pdf"):
     c = canvas.Canvas(filename, pagesize=A4)
     width, height = A4
