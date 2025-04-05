@@ -2,65 +2,109 @@ import fitz  # PyMuPDF
 import pandas as pd
 import plotly.express as px
 import re
-import os
 
-# ✅ 1. Estrazione da PDF con debug
-def extract_financial_data_from_pdf(file_path):
-    patterns = {
-        "Ricavi": [r"(ricavi netti|net revenues)[^\d]{0,40}([\d.,]{5,})"],
-        "Utile Netto": [r"(utile netto|net income|net profit)[^\d]{0,40}([\d.,]{5,})"],
-        "Totale Attivo": [r"(totale attivo|total assets)[^\d]{0,40}([\d.,]{5,})"],
-        "Patrimonio Netto": [r"(patrimonio netto|total equity)[^\d]{0,40}([\d.,]{5,})"]
+# ✅ SMART EXTRACT aggiornato
+def smart_extract_value(keyword, synonyms, text):
+    lines = text.split("\n")
+    all_terms = [keyword.lower()] + [s.lower() for s in synonyms]
+    candidates = []
+
+    for i, line in enumerate(lines):
+        line_clean = line.strip()
+        line_lower = line_clean.lower()
+
+        found_term = next((term for term in all_terms if term in line_lower), None)
+        if not found_term:
+            continue
+
+        numbers = re.findall(r"[-+]?\d[\d.,]{1,}", line_clean)
+        for num_str in numbers:
+            try:
+                val = float(num_str.replace(".", "").replace(",", "."))
+            except:
+                continue
+
+            score = 0
+
+            if keyword.lower() in line_lower:
+                score += 3
+            if found_term != keyword.lower():
+                score += 2
+            if sum(term in line_lower for term in all_terms) == 1:
+                score += 1
+            if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25:
+                score += 2
+            if any(u in line_lower for u in ["€", "mln", "milioni", "million"]):
+                score += 3
+            if 1_000 <= val <= 1_000_000_000:
+                score += 1
+            if i < 10 or i > len(lines) - 10:
+                score += 1
+            if ":" in line_lower or "\t" in line_lower:
+                score += 1
+            if "totale" in line_lower or "netto" in line_lower:
+                score += 2
+            if val < 0 and any(term in line_lower for term in ["costo", "perdita", "oneri"]):
+                score += 1
+            if sum(term in text.lower() for term in all_terms) > 4:
+                score -= 1
+
+            candidates.append({
+                "term": found_term,
+                "valore": val,
+                "score": score,
+                "riga": line_clean
+            })
+
+    best = sorted(candidates, key=lambda x: x["score"], reverse=True)
+    return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
+
+
+# ✅ Dizionario sinonimi
+def extract_all_values_smart(text):
+    keywords_map = {
+        "Ricavi": ["Totale ricavi", "Net revenues", "Ricavi netti", "Vendite", "Revenues"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total costs"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Net profit", "Net income"],
+        "Totale Attivo": ["Totale attivo", "Total assets", "Attività totali"],
+        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Total equity", "Net equity"]
     }
 
+    results = {}
+    for key, synonyms in keywords_map.items():
+        estratto = smart_extract_value(key, synonyms, text)
+        results[key] = estratto["valore"]
+    return results
+
+
+# ✅ Estrazione da PDF
+def extract_financial_data_from_pdf(file_path):
     risultati = {}
     righe_debug = []
 
     try:
         with fitz.open(file_path) as doc:
-            for page_num, page in enumerate(doc, start=1):
-                text = page.get_text("text").lower().replace("€", "").replace(" ", " ").strip()
+            text = ""
+            for page in doc:
+                text += page.get_text("text") + "\n"
 
-                for voce, lista in patterns.items():
-                    if voce in risultati:
-                        continue
-                    for pattern in lista:
-                        match = re.search(pattern, text)
-                        if match:
-                            raw_val = match.group(2)
-                            try:
-                                valore = float(raw_val.replace(".", "").replace(",", "."))
-                                risultati[voce] = round(valore, 2)
-                                righe_debug.append({
-                                    "pagina": page_num,
-                                    "voce": voce,
-                                    "frase": match.group(0),
-                                    "valore_grezzo": raw_val
-                                })
-                                break
-                            except:
-                                risultati[voce] = "Errore conversione"
-                                righe_debug.append({
-                                    "pagina": page_num,
-                                    "voce": voce,
-                                    "frase": match.group(0),
-                                    "valore_grezzo": raw_val,
-                                    "errore": "Conversione fallita"
-                                })
+            risultati = extract_all_values_smart(text)
+
     except Exception as e:
         return {}, {"errore apertura PDF": str(e)}
 
-    return risultati, righe_debug
+    return risultati, text[:2000]
 
-# ✅ 2. Funzione principale
+
+# ✅ Funzione principale
 def extract_financial_data(file_path, return_debug=False, use_gpt=False):
     data = {}
     debug_info = {}
 
     if file_path.endswith(".pdf"):
-        data, righe = extract_financial_data_from_pdf(file_path)
+        data, raw = extract_financial_data_from_pdf(file_path)
         debug_info["tipo_file"] = "PDF"
-        debug_info["righe_trovate"] = righe
+        debug_info["estratto"] = raw
     elif file_path.endswith((".xlsx", ".xls")):
         try:
             df = pd.read_excel(file_path)
@@ -77,11 +121,11 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
             debug_info["errore"] = str(e)
     else:
         debug_info["errore"] = f"Formato non supportato: {file_path}"
-        print("DEBUG file path:", file_path)
 
     return (data, debug_info) if return_debug else data
 
-# ✅ 3. Calcolo KPI
+
+# ✅ KPI
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
@@ -98,7 +142,8 @@ def calculate_kpis(data):
     }
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
-# ✅ 4. Grafico KPI
+
+# ✅ Grafico KPI
 def plot_kpis(df_kpis):
     fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
     fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
