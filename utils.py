@@ -1,63 +1,58 @@
 import fitz  # PyMuPDF
-import pytesseract
-from PIL import Image
-import io
-import os
-import json
 import pandas as pd
 import plotly.express as px
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from ollama import Client
+import os
+import json
+import re
 
-client = Client()
+# OCR
+OCR_AVAILABLE = False
+try:
+    import pytesseract
+    from PIL import Image
+    import io
+    OCR_AVAILABLE = True
+except ImportError:
+    pass
 
-OCR_AVAILABLE = True
-CONFIRMED_DATA_PATH = "dati_confermati.json"
+# === Apprendimento Progressivo ===
+CONFIRMATION_DB = "confermati.json"
+def salva_valore_confermato(chiave, testo, valore):
+    if not os.path.exists(CONFIRMATION_DB):
+        with open(CONFIRMATION_DB, "w") as f:
+            json.dump({}, f)
+    with open(CONFIRMATION_DB) as f:
+        db = json.load(f)
+    if chiave not in db:
+        db[chiave] = []
+    db[chiave].append({"testo": testo, "valore": valore})
+    with open(CONFIRMATION_DB, "w") as f:
+        json.dump(db, f, indent=2)
 
-def extract_financial_data(file_path, return_debug=False, use_gpt=False):
-    text = ""
-    debug_info = {}
+def check_valori_confermati(text, chiave):
+    if not os.path.exists(CONFIRMATION_DB):
+        return None
+    with open(CONFIRMATION_DB) as f:
+        db = json.load(f)
+    candidati = db.get(chiave, [])
+    for c in candidati:
+        if c["testo"] in text:
+            return c["valore"]
+    return None
 
-    if file_path.endswith(".pdf"):
-        with fitz.open(file_path) as doc:
-            for page in doc:
-                page_text = page.get_text().strip()
-                if not page_text and OCR_AVAILABLE:
-                    pix = page.get_pixmap()
-                    img = Image.open(io.BytesIO(pix.tobytes()))
-                    text += pytesseract.image_to_string(img, lang="ita")
-                else:
-                    text += page_text
-        debug_info["estratto"] = text[:2000]
-        data = extract_all_values_smart(text)
-        if use_gpt and all(v == 0 for v in data.values()):
-            data = extract_with_gpt(text)
-    else:
-        debug_info["errore"] = f"Formato non supportato: {file_path}"
-        data = {}
-
-    return (data, debug_info) if return_debug else data
-
-
+# === Estrazione base ===
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
-    lines = text.splitlines()
+    lines = text.split("\n")
     all_terms = [keyword.lower()] + [s.lower() for s in synonyms]
-    confirmed = carica_valori_confermati()
-
-    if keyword in confirmed:
-        return {"valore": confirmed[keyword], "score": 999, "riga": "🧠 Appreso"}
 
     for i, line in enumerate(lines):
-        clean_line = line.strip()
-        line_lower = clean_line.lower()
-        found_term = next((t for t in all_terms if t in line_lower), None)
+        line_lower = line.lower()
+        found_term = next((term for term in all_terms if term in line_lower), None)
         if not found_term:
             continue
 
-        import re
-        numbers = re.findall(r"[-+]?\d[\d.,]*", clean_line)
+        numbers = re.findall(r"[-+]?\d[\d.,]+", line)
         for num_str in numbers:
             try:
                 val = float(num_str.replace(".", "").replace(",", "."))
@@ -67,76 +62,82 @@ def smart_extract_value(keyword, synonyms, text):
             score = 0
             if keyword.lower() in line_lower: score += 3
             if found_term != keyword.lower(): score += 2
-            if sum(t in line_lower for t in all_terms) == 1: score += 1
+            if sum(term in line_lower for term in all_terms) == 1: score += 1
             if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25: score += 2
-            if "€" in clean_line or ".00" in num_str or ",00" in num_str: score += 1
-            if 1_000 <= val <= 10_000_000_000: score += 1
-            if i < 15 or i > len(lines) - 15: score += 1
-            if ":" in clean_line or "\t" in clean_line: score += 1
+            if "€" in line or ".00" in num_str or ",00" in num_str: score += 1
+            if 1_000 <= val <= 100_000_000_000: score += 1
+            if i < 10 or i > len(lines) - 10: score += 1
+            if ":" in line or "\t" in line: score += 1
             if "totale" in line_lower: score += 2
-            if val < 0 and any(t in line_lower for t in ["costo", "perdita", "oneri"]): score += 1
-            if sum(t in text.lower() for t in all_terms) > 4: score -= 1
-            if "%" in clean_line: score -= 1
-            if "migliaia" in line_lower or "milioni" in line_lower: score += 1
+            if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
+            if sum(term in text.lower() for term in all_terms) > 4: score -= 1
+            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 1  # penalità per anno
 
-            candidates.append({
-                "term": found_term,
-                "valore": val,
-                "score": score,
-                "riga": clean_line
-            })
+            candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
 
-
 def extract_all_values_smart(text):
     keywords_map = {
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Proventi", "Revenues"],
-        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Expenses"],
-        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Net Income"],
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit"],
         "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
-        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Equity", "Net Assets"]
+        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "PN"]
     }
-
-    results = {}
+    risultati = {}
     for key, synonyms in keywords_map.items():
-        results[key] = smart_extract_value(key, synonyms, text)["valore"]
-    return results
+        confermato = check_valori_confermati(text, key)
+        if confermato is not None:
+            risultati[key] = confermato
+        else:
+            estratto = smart_extract_value(key, synonyms, text)
+            risultati[key] = estratto["valore"]
+    return risultati
 
+# === Estrazione principale ===
+def extract_financial_data(file_path, return_debug=False):
+    debug_info = {}
+    data = {}
 
-def extract_with_gpt(text):
-    try:
-        prompt = f"""Nel seguente testo di bilancio, estrai i seguenti valori nel formato JSON:
-- Ricavi
-- Costi
-- Utile Netto
-- Totale Attivo
-- Patrimonio Netto
+    if file_path.endswith(".pdf"):
+        text = ""
+        try:
+            with fitz.open(file_path) as doc:
+                for page in doc:
+                    t = page.get_text()
+                    if not t and OCR_AVAILABLE:
+                        pix = page.get_pixmap()
+                        img = Image.open(io.BytesIO(pix.tobytes()))
+                        t = pytesseract.image_to_string(img, lang="ita")
+                    text += t + "\n"
+        except Exception as e:
+            debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
+            return (data, debug_info) if return_debug else data
 
-Testo:
-{text[:3000]}
-"""
-        response = client.chat(model="mistral", messages=[
-            {"role": "user", "content": prompt}
-        ])
-        return json.loads(response['message']['content'])
-    except Exception as e:
-        return {"errore": str(e)}
+        debug_info["estratto"] = text[:2000]
+        data = extract_all_values_smart(text)
 
+    elif file_path.endswith((".xlsx", ".xls")):
+        try:
+            df = pd.read_excel(file_path)
+            data = {
+                "Ricavi": float(df.iloc[0].get("Ricavi", 0)),
+                "Costi": float(df.iloc[0].get("Costi", 0)),
+                "Utile Netto": float(df.iloc[0].get("Utile Netto", 0)),
+                "Totale Attivo": float(df.iloc[0].get("Totale Attivo", 0)),
+                "Patrimonio Netto": float(df.iloc[0].get("Patrimonio Netto", 0))
+            }
+        except Exception as e:
+            debug_info["errore"] = f"Errore lettura Excel: {str(e)}"
 
-def carica_valori_confermati():
-    if os.path.exists(CONFIRMED_DATA_PATH):
-        with open(CONFIRMED_DATA_PATH, "r") as f:
-            return json.load(f)
-    return {}
+    else:
+        debug_info["errore"] = f"Formato non supportato: {file_path}"
 
-def salva_valore_confermato(chiave, valore):
-    confermati = carica_valori_confermati()
-    confermati[chiave] = valore
-    with open(CONFIRMED_DATA_PATH, "w") as f:
-        json.dump(confermati, f, indent=2)
+    return (data, debug_info) if return_debug else data
 
+# === KPI ===
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
@@ -153,7 +154,7 @@ def calculate_kpis(data):
     }
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
-
+# === Grafico ===
 def plot_kpis(df_kpis):
     fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
     fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
