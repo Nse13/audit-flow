@@ -30,13 +30,15 @@ def salva_valore_confermato(chiave, testo, valore):
         json.dump(db, f, indent=2)
 
 def check_valori_confermati(text, chiave):
+    if not text or not isinstance(text, str):
+        return None
     if not os.path.exists(CONFIRMATION_DB):
         return None
     with open(CONFIRMATION_DB) as f:
         db = json.load(f)
     candidati = db.get(chiave, [])
     for c in candidati:
-        if c["testo"] in text:
+        if c.get("testo") and c["testo"] in text:
             return c["valore"]
     return None
 
