@@ -2,22 +2,9 @@ import fitz  # PyMuPDF
 import pandas as pd
 import os
 import plotly.express as px
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
 import re
 
-# ✅ OCR fallback (locale)
-OCR_AVAILABLE = False
-try:
-    import pytesseract
-    from PIL import Image
-    import io
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    OCR_AVAILABLE = True
-except ImportError:
-    pass
-
-# 📌 Estrazione dati
+# 📌 Estrazione dati da PDF o Excel (NO OCR)
 def extract_financial_data(file_path, return_debug=False, use_gpt=False):
     debug_info = {}
     data = {}
@@ -27,10 +14,6 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
         with fitz.open(file_path) as doc:
             for page in doc:
                 txt = page.get_text()
-                if not txt.strip() and OCR_AVAILABLE:
-                    pix = page.get_pixmap()
-                    img = Image.open(io.BytesIO(pix.tobytes()))
-                    txt = pytesseract.image_to_string(img, lang="ita")
                 text += txt
 
         debug_info["tipo_file"] = "PDF"
@@ -58,7 +41,7 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
 
     return (data, debug_info) if return_debug else data
 
-# 🔍 Smart extract con scoring
+# 🔍 Smart extract con punteggi
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
@@ -101,6 +84,7 @@ def smart_extract_value(keyword, synonyms, text):
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
 
+# 🔎 Smart Extract totale
 def extract_all_values_smart(text):
     keywords_map = {
         "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Proventi"],
