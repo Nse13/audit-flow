@@ -102,7 +102,7 @@ def extract_all_values_smart(text):
     return risultati
 
 # === Estrazione Principale ===
-def extract_financial_data(file_path, return_debug=False):
+def extract_financial_data(file_path, return_debug=False, use_llm=False):
     debug_info = {}
     data = {}
 
@@ -136,6 +136,7 @@ def extract_financial_data(file_path, return_debug=False):
             }
         except Exception as e:
             debug_info["errore"] = f"Errore lettura Excel: {str(e)}"
+
     else:
         debug_info["errore"] = f"Formato non supportato: {file_path}"
 
