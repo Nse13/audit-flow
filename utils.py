@@ -60,18 +60,19 @@ def smart_extract_value(keyword, synonyms, text):
                 continue
 
             score = 0
-            if keyword.lower() in line_lower: score += 3
-            if found_term != keyword.lower(): score += 2
-            if sum(term in line_lower for term in all_terms) == 1: score += 1
-            if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25: score += 2
+            if keyword.lower() in line_lower: score += 4
+            if found_term != keyword.lower(): score += 3
+            if sum(term in line_lower for term in all_terms) == 1: score += 2
+            if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25: score += 3
             if "€" in line or ".00" in num_str or ",00" in num_str: score += 1
-            if 1_000 <= val <= 100_000_000_000: score += 1
+            if 1_000 <= val <= 100_000_000_000: score += 2
             if i < 10 or i > len(lines) - 10: score += 1
             if ":" in line or "\t" in line: score += 1
             if "totale" in line_lower: score += 2
-            if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
+            if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 2
             if sum(term in text.lower() for term in all_terms) > 4: score -= 1
             if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 1
+            if len(numbers) > 3: score -= 1
 
             candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
@@ -80,9 +81,9 @@ def smart_extract_value(keyword, synonyms, text):
 
 def extract_all_values_smart(text):
     keywords_map = {
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi"],
-        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri"],
-        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit"],
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net Revenues"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Operating Costs"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net Income"],
         "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
         "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "PN"]
     }
@@ -115,11 +116,12 @@ def extract_financial_data(file_path, return_debug=False, use_llm=False):
         try:
             with fitz.open(file_path) as doc:
                 for page in doc:
-                    t = page.get_text()
-                    if not t and OCR_AVAILABLE:
+                    if OCR_AVAILABLE:
                         pix = page.get_pixmap()
                         img = Image.open(io.BytesIO(pix.tobytes()))
                         t = pytesseract.image_to_string(img, lang="ita")
+                    else:
+                        t = page.get_text()
                     text += t + "\n"
         except Exception as e:
             debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
