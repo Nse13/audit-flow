@@ -32,3 +32,10 @@ if uploaded_file:
         st.success("✅ Report generato: report_auditflow.pdf")
         with open("report_auditflow.pdf", "rb") as pdf_file:
             st.download_button(label="📥 Scarica il report", data=pdf_file, file_name="report_auditflow.pdf", mime="application/pdf")
+from analisi_llm import genera_commento_llm
+
+# Dopo avere già calcolato data e kpi_df
+commento = genera_commento_llm(data, kpi_df)
+
+st.subheader("🧠 Analisi AI (AuditLLM)")
+st.write(commento)
