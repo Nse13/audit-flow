@@ -2,8 +2,9 @@ import fitz  # PyMuPDF
 import pandas as pd
 import plotly.express as px
 import re
+import os
 
-# ✅ 1. Estrazione dati da PDF (parser avanzato con debug)
+# ✅ 1. Estrazione da PDF con debug
 def extract_financial_data_from_pdf(file_path):
     patterns = {
         "Ricavi": [r"(ricavi netti|net revenues)[^\d]{0,40}([\d.,]{5,})"],
@@ -15,35 +16,43 @@ def extract_financial_data_from_pdf(file_path):
     risultati = {}
     righe_debug = []
 
-    with fitz.open(file_path) as doc:
-        for page_num, page in enumerate(doc, start=1):
-            text = page.get_text().lower().replace("€", "").replace(" ", " ").strip()
+    try:
+        with fitz.open(file_path) as doc:
+            for page_num, page in enumerate(doc, start=1):
+                text = page.get_text("text").lower().replace("€", "").replace(" ", " ").strip()
 
-            for voce, lista in patterns.items():
-                if voce in risultati:
-                    continue
-                for pattern in lista:
-                    match = re.search(pattern, text)
-                    if match:
-                        raw_val = match.group(2)
-                        try:
-                            valore = float(raw_val.replace(".", "").replace(",", "."))
-                            risultati[voce] = round(valore, 2)
-                            righe_debug.append({
-                                "voce": voce,
-                                "pagina": page_num,
-                                "match": match.group(0),
-                                "valore": valore
-                            })
-                            break
-                        except:
-                            continue
-            if len(risultati) == len(patterns):
-                break
+                for voce, lista in patterns.items():
+                    if voce in risultati:
+                        continue
+                    for pattern in lista:
+                        match = re.search(pattern, text)
+                        if match:
+                            raw_val = match.group(2)
+                            try:
+                                valore = float(raw_val.replace(".", "").replace(",", "."))
+                                risultati[voce] = round(valore, 2)
+                                righe_debug.append({
+                                    "pagina": page_num,
+                                    "voce": voce,
+                                    "frase": match.group(0),
+                                    "valore_grezzo": raw_val
+                                })
+                                break
+                            except:
+                                risultati[voce] = "Errore conversione"
+                                righe_debug.append({
+                                    "pagina": page_num,
+                                    "voce": voce,
+                                    "frase": match.group(0),
+                                    "valore_grezzo": raw_val,
+                                    "errore": "Conversione fallita"
+                                })
+    except Exception as e:
+        return {}, {"errore apertura PDF": str(e)}
 
     return risultati, righe_debug
 
-# ✅ 2. Funzione principale per ogni formato
+# ✅ 2. Funzione principale
 def extract_financial_data(file_path, return_debug=False, use_gpt=False):
     data = {}
     debug_info = {}
@@ -67,7 +76,8 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
         except Exception as e:
             debug_info["errore"] = str(e)
     else:
-        debug_info["errore"] = "Formato non supportato"
+        debug_info["errore"] = f"Formato non supportato: {file_path}"
+        print("DEBUG file path:", file_path)
 
     return (data, debug_info) if return_debug else data
 
@@ -94,4 +104,3 @@ def plot_kpis(df_kpis):
     fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
     fig.update_layout(yaxis_title="Valore (%)", xaxis_title="", showlegend=False)
     return fig
-
