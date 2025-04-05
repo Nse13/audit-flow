@@ -3,42 +3,36 @@ import pandas as pd
 import plotly.express as px
 import re
 
-# ✅ Estrazione universale da PDF di bilanci
+# ✅ Estrazione ottimizzata per bilanci PDF (es. Stellantis)
 def extract_financial_data_from_pdf(file_path):
     patterns = {
-        "Ricavi": [
-            r"(?:Net revenues|Ricavi netti|Ricavi consolidati)[^\d€]{0,20}([\d.,]{4,})",
-            r"(?:Total Revenues)[^\d€]{0,20}([\d.,]{4,})"
-        ],
-        "Utile Netto": [
-            r"(?:Net profit|Utile netto|Net income)[^\d€]{0,20}([\d.,]{4,})"
-        ],
-        "Totale Attivo": [
-            r"(?:TOTAL ASSETS|Totale attivo)[^\d€]{0,20}([\d.,]{4,})"
-        ],
-        "Patrimonio Netto": [
-            r"(?:TOTAL EQUITY|Patrimonio netto|Equity)[^\d€]{0,20}([\d.,]{4,})"
-        ]
+        "Ricavi": [r"(ricavi netti|net revenues)[^\d]{0,20}([\d.,]{5,})"],
+        "Utile Netto": [r"(utile netto|net profit|net income)[^\d]{0,20}([\d.,]{5,})"],
+        "Totale Attivo": [r"(totale attivo|total assets)[^\d]{0,20}([\d.,]{5,})"],
+        "Patrimonio Netto": [r"(patrimonio netto|total equity)[^\d]{0,20}([\d.,]{5,})"]
     }
 
     risultati = {}
     with fitz.open(file_path) as doc:
         for page in doc:
-            text = page.get_text()
-            for voce, lista_pattern in patterns.items():
-                if voce not in risultati:
-                    for pattern in lista_pattern:
-                        match = re.search(pattern, text, re.IGNORECASE)
-                        if match:
-                            valore_str = match.group(1)
-                            valore = float(valore_str.replace(".", "").replace(",", "."))
-                            risultati[voce] = round(valore, 2)
-                            break
-            if len(risultati) == len(patterns):
+            text = page.get_text().lower().replace("€", "").replace(" ", " ").strip()
+
+            for voce, lista in patterns.items():
+                if voce in risultati:
+                    continue
+                for pattern in lista:
+                    match = re.search(pattern, text)
+                    if match:
+                        raw_val = match.group(2).replace(".", "").replace(",", ".")
+                        try:
+                            risultati[voce] = round(float(raw_val), 2)
+                        except:
+                            pass
+            if len(risultati) == 4:
                 break
     return risultati
 
-# ✅ Funzione principale per estrazione
+# ✅ Funzione principale
 def extract_financial_data(file_path, return_debug=False, use_gpt=False):
     data = {}
     debug_info = {}
