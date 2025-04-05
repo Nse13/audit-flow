@@ -3,18 +3,20 @@ import pandas as pd
 import plotly.express as px
 import re
 
-# ✅ Estrazione ottimizzata per bilanci PDF (es. Stellantis)
+# ✅ 1. Estrazione dati da PDF (parser avanzato con debug)
 def extract_financial_data_from_pdf(file_path):
     patterns = {
-        "Ricavi": [r"(ricavi netti|net revenues)[^\d]{0,20}([\d.,]{5,})"],
-        "Utile Netto": [r"(utile netto|net profit|net income)[^\d]{0,20}([\d.,]{5,})"],
-        "Totale Attivo": [r"(totale attivo|total assets)[^\d]{0,20}([\d.,]{5,})"],
-        "Patrimonio Netto": [r"(patrimonio netto|total equity)[^\d]{0,20}([\d.,]{5,})"]
+        "Ricavi": [r"(ricavi netti|net revenues)[^\d]{0,40}([\d.,]{5,})"],
+        "Utile Netto": [r"(utile netto|net income|net profit)[^\d]{0,40}([\d.,]{5,})"],
+        "Totale Attivo": [r"(totale attivo|total assets)[^\d]{0,40}([\d.,]{5,})"],
+        "Patrimonio Netto": [r"(patrimonio netto|total equity)[^\d]{0,40}([\d.,]{5,})"]
     }
 
     risultati = {}
+    righe_debug = []
+
     with fitz.open(file_path) as doc:
-        for page in doc:
+        for page_num, page in enumerate(doc, start=1):
             text = page.get_text().lower().replace("€", "").replace(" ", " ").strip()
 
             for voce, lista in patterns.items():
@@ -23,24 +25,33 @@ def extract_financial_data_from_pdf(file_path):
                 for pattern in lista:
                     match = re.search(pattern, text)
                     if match:
-                        raw_val = match.group(2).replace(".", "").replace(",", ".")
+                        raw_val = match.group(2)
                         try:
-                            risultati[voce] = round(float(raw_val), 2)
+                            valore = float(raw_val.replace(".", "").replace(",", "."))
+                            risultati[voce] = round(valore, 2)
+                            righe_debug.append({
+                                "voce": voce,
+                                "pagina": page_num,
+                                "match": match.group(0),
+                                "valore": valore
+                            })
+                            break
                         except:
-                            pass
-            if len(risultati) == 4:
+                            continue
+            if len(risultati) == len(patterns):
                 break
-    return risultati
 
-# ✅ Funzione principale
+    return risultati, righe_debug
+
+# ✅ 2. Funzione principale per ogni formato
 def extract_financial_data(file_path, return_debug=False, use_gpt=False):
     data = {}
     debug_info = {}
 
     if file_path.endswith(".pdf"):
-        data = extract_financial_data_from_pdf(file_path)
+        data, righe = extract_financial_data_from_pdf(file_path)
         debug_info["tipo_file"] = "PDF"
-        debug_info["estratto"] = data
+        debug_info["righe_trovate"] = righe
     elif file_path.endswith((".xlsx", ".xls")):
         try:
             df = pd.read_excel(file_path)
@@ -60,7 +71,7 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
 
     return (data, debug_info) if return_debug else data
 
-# 📊 Calcolo KPI
+# ✅ 3. Calcolo KPI
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
@@ -77,9 +88,10 @@ def calculate_kpis(data):
     }
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
-# 📈 Grafico KPI
+# ✅ 4. Grafico KPI
 def plot_kpis(df_kpis):
     fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
     fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
     fig.update_layout(yaxis_title="Valore (%)", xaxis_title="", showlegend=False)
     return fig
+
