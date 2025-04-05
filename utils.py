@@ -142,6 +142,21 @@ def smart_extract_value(keyword, synonyms, text):
                 "score": score,
                 "riga": clean_line
             })
+            def extract_all_values_smart(text):
+    keywords_map = {
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Proventi"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio"],
+        "Totale Attivo": ["Totale attivo", "Attività totali"],
+        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "PN"]
+    }
+    
+    results = {}
+    for key, synonyms in keywords_map.items():
+        estratto = smart_extract_value(key, synonyms, text)
+        results[key] = estratto["valore"]
+    return results
+
 
     # Ordina per punteggio
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
