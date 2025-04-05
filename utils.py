@@ -25,8 +25,7 @@ def salva_valore_confermato(chiave, testo, valore):
         db = json.load(f)
     if chiave not in db:
         db[chiave] = []
-    if not any(item["testo"] == testo for item in db[chiave]):
-        db[chiave].append({"testo": testo, "valore": valore})
+    db[chiave].append({"testo": testo, "valore": valore})
     with open(CONFIRMATION_DB, "w") as f:
         json.dump(db, f, indent=2)
 
@@ -72,7 +71,7 @@ def smart_extract_value(keyword, synonyms, text):
             if "totale" in line_lower: score += 2
             if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
             if sum(term in text.lower() for term in all_terms) > 4: score -= 1
-            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 2
+            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 1
 
             candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
@@ -81,11 +80,11 @@ def smart_extract_value(keyword, synonyms, text):
 
 def extract_all_values_smart(text):
     keywords_map = {
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Revenues", "Sales", "Totale vendite"],
-        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses", "Operating expenses", "Operating costs"],
-        "Utile Netto": ["Risultato netto", "Utile d'esercizio", "Profit", "Net income", "Net profit"],
-        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets", "Assets"],
-        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "Equity", "PN", "Total equity"]
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit"],
+        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
+        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "PN"]
     }
     risultati = {}
     for key, synonyms in keywords_map.items():
@@ -98,7 +97,7 @@ def extract_all_values_smart(text):
     return risultati
 
 # === Estrazione principale ===
-def extract_financial_data(file_path, return_debug=False):
+def extract_financial_data(file_path, return_debug=False, use_llm=False):
     debug_info = {}
     data = {}
 
