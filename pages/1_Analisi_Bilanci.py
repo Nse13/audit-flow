@@ -1,41 +1,27 @@
 import streamlit as st
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from utils import extract_financial_data, calculate_kpis, plot_kpis, salva_valore_confermato
 
-from utils import extract_financial_data, calculate_kpis, plot_kpis
+st.title("📊 Analisi Bilanci Avanzata")
+file = st.file_uploader("Carica bilancio PDF", type=["pdf"])
+use_llm = st.checkbox("📌 Usa AuditLLM per analisi avanzata")
 
-st.set_page_config(page_title="📊 Analisi Bilanci", layout="wide")
-st.title("📊 Analisi Bilanci")
-st.write("Carica un bilancio PDF o Excel per analisi automatica.")
+if file:
+    with open("temp.pdf", "wb") as f:
+        f.write(file.getbuffer())
 
-# ✅ Caricamento file con estensione corretta
-uploaded_file = st.file_uploader("📁 Carica un bilancio", type=["pdf", "xlsx", "xls"])
+    data = extract_financial_data("temp.pdf", use_llm=use_llm)
 
-if uploaded_file:
-    file_type = uploaded_file.name.split(".")[-1].lower()
-    extension = f".{file_type}" if file_type in ["pdf", "xlsx", "xls"] else ""
+    st.subheader("📌 Conferma o correggi dati estratti:")
+    updated_data = {}
+    for k, v in data.items():
+        new_val = st.text_input(f"{k}:", value=str(v))
+        updated_data[k] = float(new_val)
 
-    temp_file_path = f"temp_uploaded_file{extension}"
+        if new_val != str(v):
+            salva_valore_confermato(k, float(new_val), f"valore originale:{v}")
 
-    with open(temp_file_path, "wb") as f:
-        f.write(uploaded_file.read())
+    df_kpis = calculate_kpis(updated_data)
+    st.dataframe(df_kpis)
 
-    with st.spinner("Estrazione in corso..."):
-        data, debug_info = extract_financial_data(temp_file_path, return_debug=True)
-
-    st.subheader("📄 Dati estratti")
-    st.json(data)
-
-    if debug_info:
-        with st.expander("🔍 Debug (dati grezzi estratti)"):
-            st.write(debug_info)
-
-    if data:
-        st.subheader("📈 KPI Calcolati")
-        kpis = calculate_kpis(data)
-        st.dataframe(kpis)
-
-        st.subheader("📊 Grafico KPI")
-        fig = plot_kpis(kpis)
-        st.plotly_chart(fig, use_container_width=True)
+    fig = plot_kpis(df_kpis)
+    st.plotly_chart(fig)
