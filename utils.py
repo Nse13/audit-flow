@@ -5,7 +5,6 @@ import os
 import json
 import re
 
-# OCR
 OCR_AVAILABLE = False
 try:
     import pytesseract
@@ -17,6 +16,7 @@ except ImportError:
 
 # === Apprendimento Progressivo ===
 CONFIRMATION_DB = "confermati.json"
+
 def salva_valore_confermato(chiave, testo, valore):
     if not os.path.exists(CONFIRMATION_DB):
         with open(CONFIRMATION_DB, "w") as f:
@@ -40,7 +40,7 @@ def check_valori_confermati(text, chiave):
             return c["valore"]
     return None
 
-# === Estrazione base ===
+# === Estrazione Migliorata ===
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
@@ -48,6 +48,9 @@ def smart_extract_value(keyword, synonyms, text):
 
     for i, line in enumerate(lines):
         line_lower = line.lower()
+        if len(line.split()) < 2:
+            continue  # riga troppo breve
+
         found_term = next((term for term in all_terms if term in line_lower), None)
         if not found_term:
             continue
@@ -60,19 +63,20 @@ def smart_extract_value(keyword, synonyms, text):
                 continue
 
             score = 0
-            if keyword.lower() in line_lower: score += 4
-            if found_term != keyword.lower(): score += 3
-            if sum(term in line_lower for term in all_terms) == 1: score += 2
-            if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25: score += 3
+            if keyword.lower() in line_lower: score += 3
+            if found_term != keyword.lower(): score += 2
+            if sum(term in line_lower for term in all_terms) == 1: score += 1
+            if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25: score += 2
             if "€" in line or ".00" in num_str or ",00" in num_str: score += 1
-            if 1_000 <= val <= 100_000_000_000: score += 2
+            if re.search(r"\d{1,3}[\.,]\d{3}", num_str): score += 2
+            if any(w in line_lower for w in ["milioni", "migliaia", "euro", "€"]): score += 2
+            if 1_000 <= val <= 1_000_000_000_000: score += 1
             if i < 10 or i > len(lines) - 10: score += 1
             if ":" in line or "\t" in line: score += 1
             if "totale" in line_lower: score += 2
-            if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 2
+            if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
             if sum(term in text.lower() for term in all_terms) > 4: score -= 1
-            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 1
-            if len(numbers) > 3: score -= 1
+            if 1900 <= val <= 2100: score -= 3  # penalità per anni
 
             candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
@@ -81,9 +85,9 @@ def smart_extract_value(keyword, synonyms, text):
 
 def extract_all_values_smart(text):
     keywords_map = {
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net Revenues"],
-        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Operating Costs"],
-        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net Income"],
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit"],
         "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
         "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "PN"]
     }
@@ -97,40 +101,30 @@ def extract_all_values_smart(text):
             risultati[key] = estratto["valore"]
     return risultati
 
-def extract_with_gpt_mock(text):
-    return {
-        "Ricavi": 207607000000,
-        "Costi": 180000000000,
-        "Utile Netto": 18000000000,
-        "Totale Attivo": 300000000000,
-        "Patrimonio Netto": 100000000000
-    }
-
-# === Estrazione principale ===
-def extract_financial_data(file_path, return_debug=False, use_llm=False):
+# === Estrazione Principale ===
+def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
 
-    if isinstance(file_path, str) and file_path.endswith(".pdf"):
+    if file_path.endswith(".pdf"):
         text = ""
         try:
             with fitz.open(file_path) as doc:
                 for page in doc:
-                    if OCR_AVAILABLE:
+                    t = page.get_text()
+                    if not t and OCR_AVAILABLE:
                         pix = page.get_pixmap()
                         img = Image.open(io.BytesIO(pix.tobytes()))
                         t = pytesseract.image_to_string(img, lang="ita")
-                    else:
-                        t = page.get_text()
                     text += t + "\n"
         except Exception as e:
             debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
             return (data, debug_info) if return_debug else data
 
         debug_info["estratto"] = text[:2000]
-        data = extract_with_gpt_mock(text) if use_llm else extract_all_values_smart(text)
+        data = extract_all_values_smart(text)
 
-    elif isinstance(file_path, str) and file_path.endswith((".xlsx", ".xls")):
+    elif file_path.endswith((".xlsx", ".xls")):
         try:
             df = pd.read_excel(file_path)
             data = {
@@ -142,7 +136,6 @@ def extract_financial_data(file_path, return_debug=False, use_llm=False):
             }
         except Exception as e:
             debug_info["errore"] = f"Errore lettura Excel: {str(e)}"
-
     else:
         debug_info["errore"] = f"Formato non supportato: {file_path}"
 
