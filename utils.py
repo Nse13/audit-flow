@@ -71,7 +71,7 @@ def smart_extract_value(keyword, synonyms, text):
             if "totale" in line_lower: score += 2
             if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
             if sum(term in text.lower() for term in all_terms) > 4: score -= 1
-            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 1  # penalità per anno
+            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 1
 
             candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
@@ -101,7 +101,7 @@ def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
 
-    if file_path.endswith(".pdf"):
+    if isinstance(file_path, str) and file_path.endswith(".pdf"):
         text = ""
         try:
             with fitz.open(file_path) as doc:
@@ -119,7 +119,7 @@ def extract_financial_data(file_path, return_debug=False):
         debug_info["estratto"] = text[:2000]
         data = extract_all_values_smart(text)
 
-    elif file_path.endswith((".xlsx", ".xls")):
+    elif isinstance(file_path, str) and file_path.endswith((".xlsx", ".xls")):
         try:
             df = pd.read_excel(file_path)
             data = {
