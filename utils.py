@@ -5,6 +5,7 @@ import os
 import json
 import re
 
+# OCR
 OCR_AVAILABLE = False
 try:
     import pytesseract
@@ -16,7 +17,6 @@ except ImportError:
 
 # === Apprendimento Progressivo ===
 CONFIRMATION_DB = "confermati.json"
-
 def salva_valore_confermato(chiave, testo, valore):
     if not os.path.exists(CONFIRMATION_DB):
         with open(CONFIRMATION_DB, "w") as f:
@@ -25,24 +25,23 @@ def salva_valore_confermato(chiave, testo, valore):
         db = json.load(f)
     if chiave not in db:
         db[chiave] = []
-    db[chiave].append({"testo": testo, "valore": valore})
+    if not any(item["testo"] == testo for item in db[chiave]):
+        db[chiave].append({"testo": testo, "valore": valore})
     with open(CONFIRMATION_DB, "w") as f:
         json.dump(db, f, indent=2)
 
 def check_valori_confermati(text, chiave):
-    if not text or not isinstance(text, str):
-        return None
     if not os.path.exists(CONFIRMATION_DB):
         return None
     with open(CONFIRMATION_DB) as f:
         db = json.load(f)
     candidati = db.get(chiave, [])
     for c in candidati:
-        if c.get("testo") and c["testo"] in text:
+        if c["testo"] in text:
             return c["valore"]
     return None
 
-# === Estrazione Migliorata ===
+# === Estrazione base ===
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
@@ -50,9 +49,6 @@ def smart_extract_value(keyword, synonyms, text):
 
     for i, line in enumerate(lines):
         line_lower = line.lower()
-        if len(line.split()) < 2:
-            continue  # riga troppo breve
-
         found_term = next((term for term in all_terms if term in line_lower), None)
         if not found_term:
             continue
@@ -70,15 +66,13 @@ def smart_extract_value(keyword, synonyms, text):
             if sum(term in line_lower for term in all_terms) == 1: score += 1
             if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25: score += 2
             if "€" in line or ".00" in num_str or ",00" in num_str: score += 1
-            if re.search(r"\d{1,3}[\.,]\d{3}", num_str): score += 2
-            if any(w in line_lower for w in ["milioni", "migliaia", "euro", "€"]): score += 2
-            if 1_000 <= val <= 1_000_000_000_000: score += 1
+            if 1_000 <= val <= 100_000_000_000: score += 1
             if i < 10 or i > len(lines) - 10: score += 1
             if ":" in line or "\t" in line: score += 1
             if "totale" in line_lower: score += 2
             if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
             if sum(term in text.lower() for term in all_terms) > 4: score -= 1
-            if 1900 <= val <= 2100: score -= 3  # penalità per anni
+            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 2
 
             candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
@@ -87,11 +81,11 @@ def smart_extract_value(keyword, synonyms, text):
 
 def extract_all_values_smart(text):
     keywords_map = {
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi"],
-        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri"],
-        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit"],
-        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
-        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "PN"]
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Revenues", "Sales", "Totale vendite"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses", "Operating expenses", "Operating costs"],
+        "Utile Netto": ["Risultato netto", "Utile d'esercizio", "Profit", "Net income", "Net profit"],
+        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets", "Assets"],
+        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "Equity", "PN", "Total equity"]
     }
     risultati = {}
     for key, synonyms in keywords_map.items():
@@ -103,8 +97,8 @@ def extract_all_values_smart(text):
             risultati[key] = estratto["valore"]
     return risultati
 
-# === Estrazione Principale ===
-def extract_financial_data(file_path, return_debug=False, use_llm=False):
+# === Estrazione principale ===
+def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
 
