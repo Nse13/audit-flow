@@ -96,8 +96,17 @@ def extract_all_values_smart(text):
             risultati[key] = estratto["valore"]
     return risultati
 
+def extract_with_gpt_mock(text):
+    return {
+        "Ricavi": 207607000000,
+        "Costi": 180000000000,
+        "Utile Netto": 18000000000,
+        "Totale Attivo": 300000000000,
+        "Patrimonio Netto": 100000000000
+    }
+
 # === Estrazione principale ===
-def extract_financial_data(file_path, return_debug=False):
+def extract_financial_data(file_path, return_debug=False, use_llm=False):
     debug_info = {}
     data = {}
 
@@ -117,7 +126,7 @@ def extract_financial_data(file_path, return_debug=False):
             return (data, debug_info) if return_debug else data
 
         debug_info["estratto"] = text[:2000]
-        data = extract_all_values_smart(text)
+        data = extract_with_gpt_mock(text) if use_llm else extract_all_values_smart(text)
 
     elif isinstance(file_path, str) and file_path.endswith((".xlsx", ".xls")):
         try:
