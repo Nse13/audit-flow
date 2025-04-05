@@ -30,13 +30,15 @@ def salva_valore_confermato(chiave, testo, valore):
         json.dump(db, f, indent=2)
 
 def check_valori_confermati(text, chiave):
+    if not isinstance(text, str):
+        return None
     if not os.path.exists(CONFIRMATION_DB):
         return None
     with open(CONFIRMATION_DB) as f:
         db = json.load(f)
     candidati = db.get(chiave, [])
     for c in candidati:
-        if c["testo"] in text:
+        if c.get("testo") and c["testo"] in text:
             return c["valore"]
     return None
 
@@ -114,6 +116,10 @@ def extract_financial_data(file_path, return_debug=False, use_llm=False):
                     text += t + "\n"
         except Exception as e:
             debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
+            return (data, debug_info) if return_debug else data
+
+        if not isinstance(text, str) or not text.strip():
+            debug_info["errore"] = "Testo non valido o vuoto"
             return (data, debug_info) if return_debug else data
 
         debug_info["estratto"] = text[:2000]
