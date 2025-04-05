@@ -1,62 +1,82 @@
 import streamlit as st
 import os
 import sys
+import pytesseract
+from PIL import Image
+import fitz  # PyMuPDF
+import re
+import io
 import json
 
-# 📌 Per importare utils.py dalla cartella principale
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# ✅ Percorso Tesseract (necessario solo su Windows)
+pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 
-from utils import (
-    extract_financial_data,
-    calculate_kpis,
-    plot_kpis,
-    load_learned_patterns,
-    save_learned_pattern,
-    smart_extract_value
-)
+# ✅ Funzione OCR per pagine immagine del PDF
+def ocr_page(page):
+    pix = page.get_pixmap()
+    img = Image.open(io.BytesIO(pix.tobytes()))
+    return pytesseract.image_to_string(img, lang='ita')
 
-st.set_page_config(page_title="📊 Analisi Bilanci", layout="wide")
-st.title("📊 Analisi Bilanci")
-st.markdown("Carica un bilancio PDF o Excel per analisi automatica intelligente.")
+# ✅ Estrazione testo da PDF (OCR + testo nativo)
+def estrai_testo_pdf(file_path):
+    testo = ""
+    with fitz.open(file_path) as doc:
+        for page in doc:
+            text_page = page.get_text()
+            if text_page.strip():
+                testo += text_page
+            else:
+                testo += ocr_page(page)
+    return testo
 
-# Upload del file
-uploaded_file = st.file_uploader("📁 Carica un bilancio", type=["pdf", "xlsx", "xls"])
+# ✅ Sinonimi delle voci contabili principali
+synonyms = {
+    "Ricavi": ["Totale ricavi", "Vendite", "Fatturato", "Revenues"],
+    "Costi": ["Costi totali", "Spese operative", "Operating costs"],
+    "Utile Netto": ["Risultato netto", "Profitto netto", "Net income"],
+    "Totale Attivo": ["Attività totali", "Totale attività", "Total assets"],
+    "Patrimonio Netto": ["Capitale proprio", "Equity", "Patrimonio netto"]
+}
 
-# Opzioni utente
-use_gpt = st.checkbox("Usa fallback GPT se parser fallisce", value=False)
-show_debug = st.checkbox("Mostra righe trovate e debug", value=True)
+# ✅ Parser semantico: trova numeri associati ai sinonimi
+def extract_financial_values(text, synonyms):
+    estratti = {}
+    for key, syns in synonyms.items():
+        pattern = r"(?i)(" + "|".join(re.escape(s) for s in syns) + r")[^\d\n]*?([\d\.,]+)"
+        matches = re.findall(pattern, text)
+        if matches:
+            valore_raw = matches[0][1].replace(".", "").replace(",", ".")
+            try:
+                estratti[key] = float(valore_raw)
+            except:
+                estratti[key] = 0.0
+        else:
+            estratti[key] = 0.0
+    return estratti
 
-# Estrazione e analisi
+# ✅ App Streamlit
+st.set_page_config(page_title="Estrazione & Revisione Bilancio", layout="centered")
+st.title("📊 Estrazione Dati Bilancio - Modalità Esperta")
+
+uploaded_file = st.file_uploader("📁 Carica un bilancio PDF", type=["pdf"])
+
 if uploaded_file:
-    file_path = "temp_uploaded_file"
-    with open(file_path, "wb") as f:
+    with open("tempfile.pdf", "wb") as f:
         f.write(uploaded_file.read())
 
-    with st.spinner("Estrazione in corso..."):
-        data, debug = extract_financial_data(file_path, return_debug=True, use_gpt=use_gpt)
+    with st.spinner("📄 Estrazione testo e dati in corso..."):
+        testo = estrai_testo_pdf("tempfile.pdf")
+        dati_auto = extract_financial_values(testo, synonyms)
 
-    st.subheader("📄 Dati estratti")
-    st.json(data)
+    st.subheader("🔍 Dati Estratti Automaticamente")
+    st.write("Correggi i valori se necessario:")
 
-    if "errore" in debug:
-        st.error(f"Errore nel file: {debug['errore']}")
+    dati_confermati = {}
+    for voce, valore in dati_auto.items():
+        input_val = st.number_input(f"{voce}", value=valore, step=1000.0)
+        dati_confermati[voce] = input_val
 
-    # Debug e apprendimento
-    if show_debug and "parser_debug" in debug:
-        st.subheader("🔍 Debug Parser Avanzato")
-        for voce, info in debug["parser_debug"].items():
-            with st.expander(f"📌 {voce} - Scelto: {info['valore']} (score {info['score']})"):
-                st.write(f"**Riga trovata:**")
-                st.code(info["riga"])
-                if st.button(f"✅ Conferma e salva riga per '{voce}'", key=f"save_{voce}"):
-                    save_learned_pattern(voce, info["riga"], info["valore"])
-                    st.success(f"✔ Pattern salvato per '{voce}'")
-
-    # KPI
-    if data:
-        kpis = calculate_kpis(data)
-        st.subheader("📈 KPI Calcolati")
-        st.dataframe(kpis)
-
-        st.subheader("📊 Grafico KPI")
-        st.plotly_chart(plot_kpis(kpis), use_container_width=True)
+    if st.button("✅ Conferma e Salva"):
+        with open("dati_confermati.json", "w") as f:
+            json.dump(dati_confermati, f, indent=2)
+        st.success("✔️ Dati confermati e salvati in 'dati_confermati.json'")
