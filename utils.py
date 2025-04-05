@@ -5,6 +5,7 @@ import os
 import plotly.express as px
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+import re
 
 # ✅ Prova a importare OCR se disponibile
 OCR_AVAILABLE = False
@@ -12,7 +13,7 @@ try:
     import pytesseract
     from PIL import Image
     import io
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"  # solo per Windows
+    pytesseract.pytesseract.tesseract_cmd = r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"  # solo per Windows
     OCR_AVAILABLE = True
 except ImportError:
     pass
@@ -42,7 +43,7 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
         if use_gpt:
             data = extract_with_gpt(text)
         else:
-            data = extract_with_keywords(text)
+            data = extract_all_values_smart(text)
 
     elif file_path.endswith((".xlsx", ".xls")):
         df = pd.read_excel(file_path)
@@ -61,14 +62,8 @@ def extract_financial_data(file_path, return_debug=False, use_gpt=False):
 
     return (data, debug_info) if return_debug else data
 
-# 🔍 2. Estrazione base da testo (senza GPT)
-import re
-
+# 🔍 2. Estrazione avanzata con scoring intelligente
 def smart_extract_value(keyword, synonyms, text):
-    """
-    Cerca nel testo il valore numerico più probabile associato alla keyword o ai suoi sinonimi,
-    usando un sistema di scoring su più criteri.
-    """
     candidates = []
     lines = text.split("\n")
     all_terms = [keyword.lower()] + [s.lower() for s in synonyms]
@@ -76,13 +71,10 @@ def smart_extract_value(keyword, synonyms, text):
     for i, line in enumerate(lines):
         clean_line = line.strip()
         line_lower = clean_line.lower()
-
-        # Criterio 1: contiene la keyword o un sinonimo
         found_term = next((term for term in all_terms if term in line_lower), None)
         if not found_term:
             continue
 
-        # Criterio 2: estrai tutti i numeri nella riga
         numbers = re.findall(r"[-+]?\d[\d.,]*", clean_line)
         for num_str in numbers:
             try:
@@ -91,48 +83,26 @@ def smart_extract_value(keyword, synonyms, text):
                 continue
 
             score = 0
-
-            # +3: match esatto con keyword
             if keyword.lower() in line_lower:
                 score += 3
-
-            # +2: sinonimo riconosciuto
             if found_term != keyword.lower():
                 score += 2
-
-            # +1: solo una keyword nella riga
             if sum(term in line_lower for term in all_terms) == 1:
                 score += 1
-
-            # +2: numero vicino alla keyword (<25 caratteri)
             if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25:
                 score += 2
-
-            # +1: contiene "€" o due zeri
             if "€" in clean_line or ".00" in num_str or ",00" in num_str:
                 score += 1
-
-            # +1: valore realistico
             if 1_000 <= val <= 10_000_000_000:
                 score += 1
-
-            # +1: posizione strategica (inizio o fine documento)
             if i < 15 or i > len(lines) - 15:
                 score += 1
-
-            # +1: contiene ":" o tabulazione
             if ":" in clean_line or "\t" in clean_line:
                 score += 1
-
-            # +2: presenza di "totale"
             if "totale" in line_lower:
                 score += 2
-
-            # +1: segno negativo e parola come "costi" o "perdita"
             if val < 0 and any(term in line_lower for term in ["costo", "perdita", "oneri"]):
                 score += 1
-
-            # -1: la keyword è molto ricorrente nel documento (rumore)
             if sum(term in text.lower() for term in all_terms) > 4:
                 score -= 1
 
@@ -142,7 +112,12 @@ def smart_extract_value(keyword, synonyms, text):
                 "score": score,
                 "riga": clean_line
             })
-            def extract_all_values_smart(text):
+
+    best = sorted(candidates, key=lambda x: x["score"], reverse=True)
+    return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
+
+# 🔄 Cicla su tutte le voci
+def extract_all_values_smart(text):
     keywords_map = {
         "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Proventi"],
         "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri"],
@@ -150,19 +125,14 @@ def smart_extract_value(keyword, synonyms, text):
         "Totale Attivo": ["Totale attivo", "Attività totali"],
         "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "PN"]
     }
-    
+
     results = {}
     for key, synonyms in keywords_map.items():
         estratto = smart_extract_value(key, synonyms, text)
         results[key] = estratto["valore"]
     return results
 
-
-    # Ordina per punteggio
-    best = sorted(candidates, key=lambda x: x["score"], reverse=True)
-    return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
-
-# 🤖 3. Estrazione GPT (nuova sintassi OpenAI)
+# 🤖 3. Estrazione GPT (opzionale)
 def extract_with_gpt(text):
     try:
         prompt = f"""Hai il seguente testo estratto da un bilancio PDF:
