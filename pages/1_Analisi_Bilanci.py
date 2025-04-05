@@ -1,82 +1,35 @@
 import streamlit as st
-import os
 import sys
-import pytesseract
-from PIL import Image
-import fitz  # PyMuPDF
-import re
-import io
-import json
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# ✅ Percorso Tesseract (necessario solo su Windows)
-pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
+from utils import extract_financial_data, calculate_kpis, plot_kpis
 
-# ✅ Funzione OCR per pagine immagine del PDF
-def ocr_page(page):
-    pix = page.get_pixmap()
-    img = Image.open(io.BytesIO(pix.tobytes()))
-    return pytesseract.image_to_string(img, lang='ita')
+st.set_page_config(page_title="📊 Analisi Bilanci", layout="wide")
+st.title("📊 Analisi Bilanci")
+st.write("Carica un bilancio PDF o Excel per analisi automatica.")
 
-# ✅ Estrazione testo da PDF (OCR + testo nativo)
-def estrai_testo_pdf(file_path):
-    testo = ""
-    with fitz.open(file_path) as doc:
-        for page in doc:
-            text_page = page.get_text()
-            if text_page.strip():
-                testo += text_page
-            else:
-                testo += ocr_page(page)
-    return testo
-
-# ✅ Sinonimi delle voci contabili principali
-synonyms = {
-    "Ricavi": ["Totale ricavi", "Vendite", "Fatturato", "Revenues"],
-    "Costi": ["Costi totali", "Spese operative", "Operating costs"],
-    "Utile Netto": ["Risultato netto", "Profitto netto", "Net income"],
-    "Totale Attivo": ["Attività totali", "Totale attività", "Total assets"],
-    "Patrimonio Netto": ["Capitale proprio", "Equity", "Patrimonio netto"]
-}
-
-# ✅ Parser semantico: trova numeri associati ai sinonimi
-def extract_financial_values(text, synonyms):
-    estratti = {}
-    for key, syns in synonyms.items():
-        pattern = r"(?i)(" + "|".join(re.escape(s) for s in syns) + r")[^\d\n]*?([\d\.,]+)"
-        matches = re.findall(pattern, text)
-        if matches:
-            valore_raw = matches[0][1].replace(".", "").replace(",", ".")
-            try:
-                estratti[key] = float(valore_raw)
-            except:
-                estratti[key] = 0.0
-        else:
-            estratti[key] = 0.0
-    return estratti
-
-# ✅ App Streamlit
-st.set_page_config(page_title="Estrazione & Revisione Bilancio", layout="centered")
-st.title("📊 Estrazione Dati Bilancio - Modalità Esperta")
-
-uploaded_file = st.file_uploader("📁 Carica un bilancio PDF", type=["pdf"])
+uploaded_file = st.file_uploader("📁 Carica un bilancio", type=["pdf", "xlsx", "xls"])
+use_gpt = st.checkbox("Fallback GPT (solo se attivo)", value=False)
 
 if uploaded_file:
-    with open("tempfile.pdf", "wb") as f:
+    with open("temp_uploaded_file", "wb") as f:
         f.write(uploaded_file.read())
 
-    with st.spinner("📄 Estrazione testo e dati in corso..."):
-        testo = estrai_testo_pdf("tempfile.pdf")
-        dati_auto = extract_financial_values(testo, synonyms)
+    with st.spinner("Estrazione e analisi in corso..."):
+        data, debug_info = extract_financial_data("temp_uploaded_file", return_debug=True, use_gpt=use_gpt)
 
-    st.subheader("🔍 Dati Estratti Automaticamente")
-    st.write("Correggi i valori se necessario:")
+    st.subheader("📄 Dati estratti")
+    st.json(data)
 
-    dati_confermati = {}
-    for voce, valore in dati_auto.items():
-        input_val = st.number_input(f"{voce}", value=valore, step=1000.0)
-        dati_confermati[voce] = input_val
+    st.subheader("📊 KPI Calcolati")
+    kpis = calculate_kpis(data)
+    st.dataframe(kpis)
 
-    if st.button("✅ Conferma e Salva"):
-        with open("dati_confermati.json", "w") as f:
-            json.dump(dati_confermati, f, indent=2)
-        st.success("✔️ Dati confermati e salvati in 'dati_confermati.json'")
+    st.subheader("📈 Grafico KPI")
+    st.plotly_chart(plot_kpis(kpis), use_container_width=True)
+
+    if debug_info:
+        with st.expander("🔍 Debug (dati grezzi estratti)"):
+            st.write(debug_info)
+
