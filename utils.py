@@ -4,7 +4,6 @@ import plotly.express as px
 import os
 import json
 import re
-from difflib import SequenceMatcher
 
 # OCR
 OCR_AVAILABLE = False
@@ -31,81 +30,66 @@ def salva_valore_confermato(chiave, testo, valore):
         json.dump(db, f, indent=2)
 
 def check_valori_confermati(text, chiave):
-    if not isinstance(text, str):
-        return None
     if not os.path.exists(CONFIRMATION_DB):
         return None
     with open(CONFIRMATION_DB) as f:
         db = json.load(f)
     candidati = db.get(chiave, [])
     for c in candidati:
-        if isinstance(c.get("testo"), str) and c["testo"] in text:
+        if c.get("testo") and c["testo"] in text:
             return c["valore"]
     return None
 
-# === Estrazione avanzata ===
-def is_probabile_valore(numero):
-    return 1_000 <= numero <= 1_000_000_000
-
-def contiene_anno(val):
-    return str(int(val)) in ["2020", "2021", "2022", "2023", "2024"]
-
-def normalizza_valore(num_str, riga):
-    try:
-        val = float(num_str.replace(".", "").replace(",", "."))
-        if "milioni" in riga.lower():
-            val *= 1_000_000
-        elif any(m in riga.lower() for m in ["mld", "miliardi"]):
-            val *= 1_000_000_000
-        return val
-    except:
-        return 0.0
-
-def similar(a, b):
-    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
-
+# === Estrazione base ===
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
     all_terms = [keyword.lower()] + [s.lower() for s in synonyms]
 
     for i, line in enumerate(lines):
-        context_lines = lines[max(0, i-2):min(len(lines), i+3)]
-        full_context = " ".join(context_lines).lower()
-
-        found_term = next((term for term in all_terms if term in full_context), None)
+        line_lower = line.lower()
+        found_term = next((term for term in all_terms if term in line_lower), None)
         if not found_term:
             continue
 
-        numbers = re.findall(r"[-+]?\d[\d.,]+", full_context)
+        numbers = re.findall(r"[-+]?\d[\d.,]+", line)
         for num_str in numbers:
-            val = normalizza_valore(num_str, full_context)
-            if val == 0 or contiene_anno(val):
+            try:
+                val = float(num_str.replace(".", "").replace(",", "."))
+            except:
                 continue
 
-            score = 0
-            if keyword.lower() in full_context: score += 3
-            if found_term != keyword.lower(): score += 1
-            if is_probabile_valore(val): score += 2
-            if any(x in full_context for x in ["€", "eur", ",00", ".00"]): score += 1
-            if ":" in full_context or "\t" in full_context: score += 1
-            if "totale" in full_context: score += 2
-            if val < 0 and any(x in full_context for x in ["perdita", "costo"]): score += 1
-            if sum(term in full_context for term in all_terms) > 2: score -= 1
-            if any(x in full_context for x in ["2023", "2022", "2024"]): score -= 1
+            # Conversione in milioni se specificato nella riga
+            if "million" in line_lower or "milioni" in line_lower:
+                val *= 1_000_000
 
-            candidates.append({"term": found_term, "valore": val, "score": score, "riga": full_context})
+            score = 0
+            if keyword.lower() in line_lower: score += 3
+            if found_term != keyword.lower(): score += 2
+            if sum(term in line_lower for term in all_terms) == 1: score += 1
+            if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25: score += 2
+            if "€" in line or ".00" in num_str or ",00" in num_str: score += 1
+            if 1_000 <= val <= 100_000_000_000: score += 1
+            if i < 10 or i > len(lines) - 10: score += 1
+            if ":" in line or "\t" in line: score += 1
+            if "totale" in line_lower: score += 2
+            if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
+            if sum(term in text.lower() for term in all_terms) > 4: score -= 1
+            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 2  # penalità più forte per anni
+            if "consolidated" in line_lower: score += 1
+
+            candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
 
 def extract_all_values_smart(text):
     keywords_map = {
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi"],
-        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri"],
-        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit"],
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net income"],
         "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
-        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "PN"]
+        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "PN", "Total equity"]
     }
     risultati = {}
     for key, synonyms in keywords_map.items():
