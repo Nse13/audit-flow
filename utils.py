@@ -1,3 +1,5 @@
+# ✅ utils.py - versione avanzata con AI-like logic e apprendimento progressivo
+
 import fitz  # PyMuPDF
 import pandas as pd
 import plotly.express as px
@@ -5,7 +7,7 @@ import os
 import json
 import re
 
-# OCR
+# OCR opzionale
 OCR_AVAILABLE = False
 try:
     import pytesseract
@@ -15,7 +17,7 @@ try:
 except ImportError:
     pass
 
-# === Apprendimento Progressivo ===
+# === Apprendimento progressivo ===
 CONFIRMATION_DB = "confermati.json"
 def salva_valore_confermato(chiave, testo, valore):
     if not os.path.exists(CONFIRMATION_DB):
@@ -36,52 +38,53 @@ def check_valori_confermati(text, chiave):
         db = json.load(f)
     candidati = db.get(chiave, [])
     for c in candidati:
-        if c.get("testo") and c["testo"] in text:
+        if isinstance(c, dict) and c.get("testo") and c["testo"] in text:
             return c["valore"]
     return None
 
-# === Estrazione base ===
+# === Estrazione intelligente da testo ===
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
     all_terms = [keyword.lower()] + [s.lower() for s in synonyms]
 
     for i, line in enumerate(lines):
+        block = " ".join(lines[max(0, i-2):i+3]).lower()
         line_lower = line.lower()
-        found_term = next((term for term in all_terms if term in line_lower), None)
+        found_term = next((term for term in all_terms if term in block), None)
         if not found_term:
             continue
 
-        numbers = re.findall(r"[-+]?\d[\d.,]+", line)
+        numbers = re.findall(r"[-+]?\d[\d.,]+", block)
         for num_str in numbers:
             try:
                 val = float(num_str.replace(".", "").replace(",", "."))
             except:
                 continue
 
-            if "million" in line_lower or "milioni" in line_lower:
-                val *= 1_000_000
+            # Identifica unità di misura globali
+            multiplier = 1
+            header_text = " ".join(lines[:20]).lower()
+            if "million" in header_text or "milioni" in header_text:
+                multiplier = 1_000_000
+            elif "thousand" in header_text or "migliaia" in header_text:
+                multiplier = 1_000
+            val *= multiplier
 
             score = 0
-            if keyword.lower() in line_lower: score += 3
+            if keyword.lower() in block: score += 4
             if found_term != keyword.lower(): score += 2
-            if sum(term in line_lower for term in all_terms) == 1: score += 1
-            if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25: score += 2
-            if "€" in line or ".00" in num_str or ",00" in num_str: score += 1
-            if 1_000 <= val <= 100_000_000_000: score += 1
-            if i < 10 or i > len(lines) - 10: score += 1
-            if ":" in line or "\t" in line: score += 1
-            if "totale" in line_lower: score += 2
-            if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
-            if sum(term in text.lower() for term in all_terms) > 4: score -= 1
-            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 2
-            if "consolidated" in line_lower: score += 1
-            if len(num_str) <= 4 and val < 2100: score -= 3  # evita anni tipo 2023
-            if any(w in line_lower for w in ["year", "anno"]): score -= 2
-
-            context = " ".join(lines[max(0, i-1):i+2]).lower()
-            if any(kw in context for kw in all_terms):
-                score += 2
+            if sum(term in block for term in all_terms) == 1: score += 1
+            if abs(block.find(found_term) - block.find(num_str)) < 25: score += 2
+            if any(x in block for x in ["€", "$", "%", ".00", ",00"]): score += 1
+            if 1_000 <= val <= 1_000_000_000_000: score += 2
+            if i < 15 or i > len(lines) - 15: score += 1
+            if any(x in line_lower for x in [":", "\t", "........"]): score += 2
+            if "totale" in block: score += 2
+            if val < 0 and any(x in block for x in ["perdita", "loss", "negativo"]): score += 1
+            if any(x in block for x in ["2023", "2022", "2024", "anno"]): score -= 2
+            if len(num_str) <= 4 and val < 2100: score -= 2
+            if "consolidated" in block or "statement of" in block: score += 2
 
             candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
@@ -90,11 +93,11 @@ def smart_extract_value(keyword, synonyms, text):
 
 def extract_all_values_smart(text):
     keywords_map = {
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues"],
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues", "Revenue from sales"],
         "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
-        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net income"],
-        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
-        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "PN", "Total equity"]
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Net income", "Profit", "Net profit", "Utile"],
+        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets", "Total consolidated assets"],
+        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "Total equity", "Shareholders’ equity"]
     }
     risultati = {}
     for key, synonyms in keywords_map.items():
@@ -106,7 +109,7 @@ def extract_all_values_smart(text):
             risultati[key] = estratto["valore"]
     return risultati
 
-# === Estrazione principale ===
+# === Estrazione file principale ===
 def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
@@ -164,7 +167,7 @@ def calculate_kpis(data):
     }
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
-# === Grafico ===
+# === Grafico KPI ===
 def plot_kpis(df_kpis):
     fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
     fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
