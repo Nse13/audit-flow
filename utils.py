@@ -1,4 +1,4 @@
-# ✅ utils.py - versione avanzata con AI-like logic e apprendimento progressivo
+# ✅ utils.py - Estrazione avanzata con ML leggero + pdfplumber + OCR
 
 import fitz  # PyMuPDF
 import pandas as pd
@@ -6,14 +6,25 @@ import plotly.express as px
 import os
 import json
 import re
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import CountVectorizer
 
-# OCR opzionale
+# OCR
 OCR_AVAILABLE = False
 try:
     import pytesseract
     from PIL import Image
     import io
     OCR_AVAILABLE = True
+except ImportError:
+    pass
+
+# pdfplumber
+PDFPLUMBER_AVAILABLE = False
+try:
+    import pdfplumber
+    PDFPLUMBER_AVAILABLE = True
 except ImportError:
     pass
 
@@ -42,7 +53,26 @@ def check_valori_confermati(text, chiave):
             return c["valore"]
     return None
 
-# === Estrazione intelligente da testo ===
+# === Modello ML base ===
+ML_MODEL = RandomForestClassifier(n_estimators=10, random_state=42)
+ML_VECTOR = CountVectorizer()
+ML_TRAINED = False
+
+def train_ml_model(samples):
+    global ML_MODEL, ML_VECTOR, ML_TRAINED
+    texts = [s['text'] for s in samples]
+    labels = [s['label'] for s in samples]
+    X = ML_VECTOR.fit_transform(texts)
+    ML_MODEL.fit(X, labels)
+    ML_TRAINED = True
+
+def ml_predict(text):
+    if not ML_TRAINED:
+        return 0
+    X = ML_VECTOR.transform([text])
+    return ML_MODEL.predict(X)[0]
+
+# === Estrazione smart ===
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
@@ -50,7 +80,6 @@ def smart_extract_value(keyword, synonyms, text):
 
     for i, line in enumerate(lines):
         block = " ".join(lines[max(0, i-2):i+3]).lower()
-        line_lower = line.lower()
         found_term = next((term for term in all_terms if term in block), None)
         if not found_term:
             continue
@@ -62,7 +91,6 @@ def smart_extract_value(keyword, synonyms, text):
             except:
                 continue
 
-            # Identifica unità di misura globali
             multiplier = 1
             header_text = " ".join(lines[:20]).lower()
             if "million" in header_text or "milioni" in header_text:
@@ -79,12 +107,20 @@ def smart_extract_value(keyword, synonyms, text):
             if any(x in block for x in ["€", "$", "%", ".00", ",00"]): score += 1
             if 1_000 <= val <= 1_000_000_000_000: score += 2
             if i < 15 or i > len(lines) - 15: score += 1
-            if any(x in line_lower for x in [":", "\t", "........"]): score += 2
+            if any(x in line for x in [":", "\t", "........"]): score += 2
             if "totale" in block: score += 2
             if val < 0 and any(x in block for x in ["perdita", "loss", "negativo"]): score += 1
             if any(x in block for x in ["2023", "2022", "2024", "anno"]): score -= 2
             if len(num_str) <= 4 and val < 2100: score -= 2
             if "consolidated" in block or "statement of" in block: score += 2
+
+            # 🧠 Applica predizione ML se addestrato
+            if ML_TRAINED:
+                ml_score = ml_predict(line)
+                if ml_score == 1:
+                    score += 3
+                else:
+                    score -= 1
 
             candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
@@ -93,7 +129,7 @@ def smart_extract_value(keyword, synonyms, text):
 
 def extract_all_values_smart(text):
     keywords_map = {
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues", "Revenue from sales"],
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues"],
         "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
         "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Net income", "Profit", "Net profit", "Utile"],
         "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets", "Total consolidated assets"],
@@ -109,25 +145,39 @@ def extract_all_values_smart(text):
             risultati[key] = estratto["valore"]
     return risultati
 
-# === Estrazione file principale ===
+# === Estrazione principale ===
 def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
 
     if file_path.endswith(".pdf"):
         text = ""
-        try:
-            with fitz.open(file_path) as doc:
-                for page in doc:
-                    t = page.get_text()
-                    if not t and OCR_AVAILABLE:
-                        pix = page.get_pixmap()
-                        img = Image.open(io.BytesIO(pix.tobytes()))
-                        t = pytesseract.image_to_string(img, lang="ita")
-                    text += t + "\n"
-        except Exception as e:
-            debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
-            return (data, debug_info) if return_debug else data
+        if PDFPLUMBER_AVAILABLE:
+            try:
+                with pdfplumber.open(file_path) as pdf:
+                    for page in pdf.pages:
+                        text += page.extract_text() or ""
+                        tables = page.extract_tables()
+                        for table in tables:
+                            for row in table:
+                                if row:
+                                    text += "\n" + " ".join([cell or "" for cell in row])
+            except Exception as e:
+                debug_info["errore"] = f"Errore pdfplumber: {str(e)}"
+
+        if not text:
+            try:
+                with fitz.open(file_path) as doc:
+                    for page in doc:
+                        t = page.get_text()
+                        if not t and OCR_AVAILABLE:
+                            pix = page.get_pixmap()
+                            img = Image.open(io.BytesIO(pix.tobytes()))
+                            t = pytesseract.image_to_string(img, lang="ita")
+                        text += t + "\n"
+            except Exception as e:
+                debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
+                return (data, debug_info) if return_debug else data
 
         debug_info["estratto"] = text[:2000]
         data = extract_all_values_smart(text)
