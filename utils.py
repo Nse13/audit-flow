@@ -1,5 +1,3 @@
-# ✅ utils.py - Estrazione avanzata con ML leggero + pdfplumber + OCR
-
 import fitz  # PyMuPDF
 import pandas as pd
 import plotly.express as px
@@ -52,8 +50,7 @@ def check_valori_confermati(text, chiave):
         if isinstance(c, dict) and c.get("testo") and c["testo"] in text:
             return c["valore"]
     return None
-
-# === Modello ML base ===
+# === ML semplificato ===
 ML_MODEL = RandomForestClassifier(n_estimators=10, random_state=42)
 ML_VECTOR = CountVectorizer()
 ML_TRAINED = False
@@ -72,7 +69,7 @@ def ml_predict(text):
     X = ML_VECTOR.transform([text])
     return ML_MODEL.predict(X)[0]
 
-# === Estrazione smart ===
+# === Estrazione avanzata ===
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
@@ -91,8 +88,9 @@ def smart_extract_value(keyword, synonyms, text):
             except:
                 continue
 
+            # Rileva unità (milioni/migliaia) nei primi 25 heading
             multiplier = 1
-            header_text = " ".join(lines[:20]).lower()
+            header_text = " ".join(lines[:25]).lower()
             if "million" in header_text or "milioni" in header_text:
                 multiplier = 1_000_000
             elif "thousand" in header_text or "migliaia" in header_text:
@@ -100,7 +98,7 @@ def smart_extract_value(keyword, synonyms, text):
             val *= multiplier
 
             score = 0
-            if keyword.lower() in block: score += 4
+            if keyword.lower() in block: score += 5
             if found_term != keyword.lower(): score += 2
             if sum(term in block for term in all_terms) == 1: score += 1
             if abs(block.find(found_term) - block.find(num_str)) < 25: score += 2
@@ -110,50 +108,77 @@ def smart_extract_value(keyword, synonyms, text):
             if any(x in line for x in [":", "\t", "........"]): score += 2
             if "totale" in block: score += 2
             if val < 0 and any(x in block for x in ["perdita", "loss", "negativo"]): score += 1
-            if any(x in block for x in ["2023", "2022", "2024", "anno"]): score -= 2
+            if any(x in block for x in ["2023", "2022", "2024", "anno"]): score -= 3
             if len(num_str) <= 4 and val < 2100: score -= 2
             if "consolidated" in block or "statement of" in block: score += 2
+            if block.count(" ") < 3: score -= 2
+            if len(block) > 250: score -= 2
+            if re.search(r"^\d{4}$", num_str): score -= 3
 
-            # 🧠 Applica predizione ML se addestrato
-            if ML_TRAINED:
-                ml_score = ml_predict(line)
-                if ml_score == 1:
-                    score += 3
-                else:
-                    score -= 1
+            # 🧠 Applica ML se disponibile
+            if ML_TRAINED and ml_predict(line) == 1:
+                score += 3
 
-            candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
+            candidates.append({
+                "term": found_term,
+                "valore": val,
+                "score": score,
+                "riga": line
+            })
 
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
-
-def extract_all_values_smart(text):
-    keywords_map = {
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues"],
-        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
-        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Net income", "Profit", "Net profit", "Utile"],
-        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets", "Total consolidated assets"],
-        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "Total equity", "Shareholders’ equity"]
-    }
-    risultati = {}
-    for key, synonyms in keywords_map.items():
-        confermato = check_valori_confermati(text, key)
-        if confermato is not None:
-            risultati[key] = confermato
-        else:
-            estratto = smart_extract_value(key, synonyms, text)
-            risultati[key] = estratto["valore"]
-    return risultati
-
 # === Estrazione principale ===
 def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
 
-    if file_path.endswith(".pdf"):
-        text = ""
+    text = ""
+
+    # 📘 Word
+    if file_path.endswith(".docx"):
+        try:
+            import docx
+            doc = docx.Document(file_path)
+            text = "\n".join([p.text for p in doc.paragraphs])
+            debug_info["tipo_file"] = "WORD"
+        except Exception as e:
+            debug_info["errore"] = f"Errore lettura DOCX: {str(e)}"
+            return (data, debug_info) if return_debug else data
+
+    # 📄 TXT
+    elif file_path.endswith(".txt"):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                text = f.read()
+            debug_info["tipo_file"] = "TXT"
+        except Exception as e:
+            debug_info["errore"] = f"Errore lettura TXT: {str(e)}"
+            return (data, debug_info) if return_debug else data
+
+    # 🧾 EXCEL
+    elif file_path.endswith((".xlsx", ".xls")):
+        try:
+            df = pd.read_excel(file_path)
+            data = {
+                "Ricavi": float(df.iloc[0].get("Ricavi", 0)),
+                "Costi": float(df.iloc[0].get("Costi", 0)),
+                "Utile Netto": float(df.iloc[0].get("Utile Netto", 0)),
+                "Totale Attivo": float(df.iloc[0].get("Totale Attivo", 0)),
+                "Patrimonio Netto": float(df.iloc[0].get("Patrimonio Netto", 0))
+            }
+            debug_info["tipo_file"] = "EXCEL"
+            debug_info["colonne"] = df.columns.tolist()
+            return (data, debug_info) if return_debug else data
+        except Exception as e:
+            debug_info["errore"] = f"Errore lettura Excel: {str(e)}"
+            return (data, debug_info) if return_debug else data
+
+    # 📑 PDF
+    elif file_path.endswith(".pdf"):
         if PDFPLUMBER_AVAILABLE:
             try:
+                import pdfplumber
                 with pdfplumber.open(file_path) as pdf:
                     for page in pdf.pages:
                         text += page.extract_text() or ""
@@ -162,6 +187,7 @@ def extract_financial_data(file_path, return_debug=False):
                             for row in table:
                                 if row:
                                     text += "\n" + " ".join([cell or "" for cell in row])
+                debug_info["tipo_file"] = "PDF (plumber)"
             except Exception as e:
                 debug_info["errore"] = f"Errore pdfplumber: {str(e)}"
 
@@ -175,31 +201,20 @@ def extract_financial_data(file_path, return_debug=False):
                             img = Image.open(io.BytesIO(pix.tobytes()))
                             t = pytesseract.image_to_string(img, lang="ita")
                         text += t + "\n"
+                debug_info["tipo_file"] = "PDF (fitz)"
             except Exception as e:
                 debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
                 return (data, debug_info) if return_debug else data
 
-        debug_info["estratto"] = text[:2000]
-        data = extract_all_values_smart(text)
-
-    elif file_path.endswith((".xlsx", ".xls")):
-        try:
-            df = pd.read_excel(file_path)
-            data = {
-                "Ricavi": float(df.iloc[0].get("Ricavi", 0)),
-                "Costi": float(df.iloc[0].get("Costi", 0)),
-                "Utile Netto": float(df.iloc[0].get("Utile Netto", 0)),
-                "Totale Attivo": float(df.iloc[0].get("Totale Attivo", 0)),
-                "Patrimonio Netto": float(df.iloc[0].get("Patrimonio Netto", 0))
-            }
-        except Exception as e:
-            debug_info["errore"] = f"Errore lettura Excel: {str(e)}"
-
+    # ❌ Altro formato non supportato
     else:
         debug_info["errore"] = f"Formato non supportato: {file_path}"
+        return (data, debug_info) if return_debug else data
 
+    # 🧠 Estrazione dei dati con sistema smart
+    debug_info["estratto"] = text[:2000]
+    data = extract_all_values_smart(text)
     return (data, debug_info) if return_debug else data
-
 # === KPI ===
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
