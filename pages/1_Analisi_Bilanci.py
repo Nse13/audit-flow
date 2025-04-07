@@ -9,7 +9,8 @@ if file:
     with open("temp.pdf", "wb") as f:
         f.write(file.getbuffer())
 
-    data = extract_financial_data("temp.pdf", use_llm=use_llm)
+    data = extract_financial_data("temp.pdf")
+
 
     st.subheader("📌 Conferma o correggi dati estratti:")
     updated_data = {}
