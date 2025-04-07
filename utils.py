@@ -59,7 +59,6 @@ def smart_extract_value(keyword, synonyms, text):
             except:
                 continue
 
-            # Conversione in milioni se specificato nella riga
             if "million" in line_lower or "milioni" in line_lower:
                 val *= 1_000_000
 
@@ -75,8 +74,14 @@ def smart_extract_value(keyword, synonyms, text):
             if "totale" in line_lower: score += 2
             if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
             if sum(term in text.lower() for term in all_terms) > 4: score -= 1
-            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 2  # penalità più forte per anni
+            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 2
             if "consolidated" in line_lower: score += 1
+            if len(num_str) <= 4 and val < 2100: score -= 3  # evita anni tipo 2023
+            if any(w in line_lower for w in ["year", "anno"]): score -= 2
+
+            context = " ".join(lines[max(0, i-1):i+2]).lower()
+            if any(kw in context for kw in all_terms):
+                score += 2
 
             candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
