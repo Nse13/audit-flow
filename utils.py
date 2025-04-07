@@ -4,6 +4,7 @@ import plotly.express as px
 import os
 import json
 import re
+from difflib import SequenceMatcher
 
 # OCR
 OCR_AVAILABLE = False
@@ -30,52 +31,68 @@ def salva_valore_confermato(chiave, testo, valore):
         json.dump(db, f, indent=2)
 
 def check_valori_confermati(text, chiave):
-    if not isinstance(text, str):
-        return None
     if not os.path.exists(CONFIRMATION_DB):
         return None
     with open(CONFIRMATION_DB) as f:
         db = json.load(f)
     candidati = db.get(chiave, [])
     for c in candidati:
-        if c.get("testo") and c["testo"] in text:
+        if c["testo"] in text:
             return c["valore"]
     return None
 
-# === Estrazione base ===
+# === Estrazione avanzata ===
+def is_probabile_valore(numero):
+    return 1_000 <= numero <= 1_000_000_000
+
+def contiene_anno(val):
+    return str(int(val)) in ["2020", "2021", "2022", "2023", "2024"]
+
+def normalizza_valore(num_str, riga):
+    try:
+        val = float(num_str.replace(".", "").replace(",", "."))
+        if "milioni" in riga.lower():
+            val *= 1_000_000
+        elif any(m in riga.lower() for m in ["mld", "miliardi"]):
+            val *= 1_000_000_000
+        return val
+    except:
+        return 0.0
+
+def similar(a, b):
+    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
     all_terms = [keyword.lower()] + [s.lower() for s in synonyms]
 
     for i, line in enumerate(lines):
-        line_lower = line.lower()
-        found_term = next((term for term in all_terms if term in line_lower), None)
+        context_lines = lines[max(0, i-2):min(len(lines), i+3)]
+        full_context = " ".join(context_lines).lower()
+
+        found_term = next((term for term in all_terms if term in full_context), None)
         if not found_term:
             continue
 
-        numbers = re.findall(r"[-+]?\d[\d.,]+", line)
+        numbers = re.findall(r"[-+]?\d[\d.,]+", full_context)
         for num_str in numbers:
-            try:
-                val = float(num_str.replace(".", "").replace(",", "."))
-            except:
+            val = normalizza_valore(num_str, full_context)
+            if val == 0 or contiene_anno(val):
                 continue
 
             score = 0
-            if keyword.lower() in line_lower: score += 3
-            if found_term != keyword.lower(): score += 2
-            if sum(term in line_lower for term in all_terms) == 1: score += 1
-            if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25: score += 2
-            if "€" in line or ".00" in num_str or ",00" in num_str: score += 1
-            if 1_000 <= val <= 100_000_000_000: score += 1
-            if i < 10 or i > len(lines) - 10: score += 1
-            if ":" in line or "\t" in line: score += 1
-            if "totale" in line_lower: score += 2
-            if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
-            if sum(term in text.lower() for term in all_terms) > 4: score -= 1
-            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 1
+            if keyword.lower() in full_context: score += 3
+            if found_term != keyword.lower(): score += 1
+            if is_probabile_valore(val): score += 2
+            if any(x in full_context for x in ["€", "eur", ",00", ".00"]): score += 1
+            if ":" in full_context or "\t" in full_context: score += 1
+            if "totale" in full_context: score += 2
+            if val < 0 and any(x in full_context for x in ["perdita", "costo"]): score += 1
+            if sum(term in full_context for term in all_terms) > 2: score -= 1
+            if any(x in full_context for x in ["2023", "2022", "2024"]): score -= 1
 
-            candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
+            candidates.append({"term": found_term, "valore": val, "score": score, "riga": full_context})
 
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
@@ -99,7 +116,7 @@ def extract_all_values_smart(text):
     return risultati
 
 # === Estrazione principale ===
-def extract_financial_data(file_path, return_debug=False, use_llm=False):
+def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
 
@@ -116,10 +133,6 @@ def extract_financial_data(file_path, return_debug=False, use_llm=False):
                     text += t + "\n"
         except Exception as e:
             debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
-            return (data, debug_info) if return_debug else data
-
-        if not isinstance(text, str) or not text.strip():
-            debug_info["errore"] = "Testo non valido o vuoto"
             return (data, debug_info) if return_debug else data
 
         debug_info["estratto"] = text[:2000]
