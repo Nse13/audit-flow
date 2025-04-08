@@ -4,21 +4,18 @@ import plotly.express as px
 import os
 import json
 import re
-import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_extraction.text import CountVectorizer
+import io
 
-# OCR
+# OCR setup
 OCR_AVAILABLE = False
 try:
     import pytesseract
     from PIL import Image
-    import io
     OCR_AVAILABLE = True
 except ImportError:
     pass
 
-# pdfplumber
+# PDF Table Extraction
 PDFPLUMBER_AVAILABLE = False
 try:
     import pdfplumber
@@ -26,8 +23,17 @@ try:
 except ImportError:
     pass
 
-# === Apprendimento progressivo ===
+# Word support
+DOCX_AVAILABLE = False
+try:
+    import docx
+    DOCX_AVAILABLE = True
+except ImportError:
+    pass
+
+# Apprendimento progressivo (valori confermati)
 CONFIRMATION_DB = "confermati.json"
+
 def salva_valore_confermato(chiave, testo, valore):
     if not os.path.exists(CONFIRMATION_DB):
         with open(CONFIRMATION_DB, "w") as f:
@@ -47,194 +53,167 @@ def check_valori_confermati(text, chiave):
         db = json.load(f)
     candidati = db.get(chiave, [])
     for c in candidati:
-        if isinstance(c, dict) and c.get("testo") and c["testo"] in text:
+        if c.get("testo") and c["testo"] in text:
             return c["valore"]
     return None
-# === ML semplificato ===
-ML_MODEL = RandomForestClassifier(n_estimators=10, random_state=42)
-ML_VECTOR = CountVectorizer()
-ML_TRAINED = False
-
-def train_ml_model(samples):
-    global ML_MODEL, ML_VECTOR, ML_TRAINED
-    texts = [s['text'] for s in samples]
-    labels = [s['label'] for s in samples]
-    X = ML_VECTOR.fit_transform(texts)
-    ML_MODEL.fit(X, labels)
-    ML_TRAINED = True
-
-def ml_predict(text):
-    if not ML_TRAINED:
-        return 0
-    X = ML_VECTOR.transform([text])
-    return ML_MODEL.predict(X)[0]
-
-# === Estrazione avanzata ===
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
     all_terms = [keyword.lower()] + [s.lower() for s in synonyms]
 
     for i, line in enumerate(lines):
-        block = " ".join(lines[max(0, i-2):i+3]).lower()
-        found_term = next((term for term in all_terms if term in block), None)
+        line_lower = line.lower()
+        found_term = next((term for term in all_terms if term in line_lower), None)
         if not found_term:
             continue
 
-        numbers = re.findall(r"[-+]?\d[\d.,]+", block)
+        numbers = re.findall(r"[-+]?\d[\d.,]+", line)
         for num_str in numbers:
             try:
                 val = float(num_str.replace(".", "").replace(",", "."))
             except:
                 continue
 
-            # Rileva unità (milioni/migliaia) nei primi 25 heading
-            multiplier = 1
-            header_text = " ".join(lines[:25]).lower()
-            if "million" in header_text or "milioni" in header_text:
-                multiplier = 1_000_000
-            elif "thousand" in header_text or "migliaia" in header_text:
-                multiplier = 1_000
-            val *= multiplier
+            if "million" in line_lower or "milioni" in line_lower:
+                val *= 1_000_000
 
             score = 0
-            if keyword.lower() in block: score += 5
+            if keyword.lower() in line_lower: score += 3
             if found_term != keyword.lower(): score += 2
-            if sum(term in block for term in all_terms) == 1: score += 1
-            if abs(block.find(found_term) - block.find(num_str)) < 25: score += 2
-            if any(x in block for x in ["€", "$", "%", ".00", ",00"]): score += 1
-            if 1_000 <= val <= 1_000_000_000_000: score += 2
-            if i < 15 or i > len(lines) - 15: score += 1
-            if any(x in line for x in [":", "\t", "........"]): score += 2
-            if "totale" in block: score += 2
-            if val < 0 and any(x in block for x in ["perdita", "loss", "negativo"]): score += 1
-            if any(x in block for x in ["2023", "2022", "2024", "anno"]): score -= 3
-            if len(num_str) <= 4 and val < 2100: score -= 2
-            if "consolidated" in block or "statement of" in block: score += 2
-            if block.count(" ") < 3: score -= 2
-            if len(block) > 250: score -= 2
-            if re.search(r"^\d{4}$", num_str): score -= 3
+            if sum(term in line_lower for term in all_terms) == 1: score += 1
+            if abs(line_lower.find(found_term) - line_lower.find(num_str)) < 25: score += 2
+            if "€" in line or ".00" in num_str or ",00" in num_str: score += 1
+            if 1_000 <= val <= 100_000_000_000: score += 1
+            if i < 10 or i > len(lines) - 10: score += 1
+            if ":" in line or "\t" in line: score += 1
+            if "totale" in line_lower: score += 2
+            if val < 0 and any(x in line_lower for x in ["perdita", "costo", "oneri"]): score += 1
+            if sum(term in text.lower() for term in all_terms) > 4: score -= 1
+            if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 2
+            if "consolidated" in line_lower: score += 1
 
-            # 🧠 Applica ML se disponibile
-            if ML_TRAINED and ml_predict(line) == 1:
-                score += 3
-
-            candidates.append({
-                "term": found_term,
-                "valore": val,
-                "score": score,
-                "riga": line
-            })
+            candidates.append({"term": found_term, "valore": val, "score": score, "riga": line})
 
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
-# === Estrazione principale ===
+def estrai_testo_da_file(file_path):
+    ext = file_path.lower()
+    testo = ""
+
+    if ext.endswith(".pdf") and PDFPLUMBER_AVAILABLE:
+        with pdfplumber.open(file_path) as pdf:
+            for page in pdf.pages:
+                testo += page.extract_text() or ""
+
+    elif ext.endswith(".pdf") and not PDFPLUMBER_AVAILABLE:
+        with fitz.open(file_path) as doc:
+            for page in doc:
+                t = page.get_text()
+                if not t and OCR_AVAILABLE:
+                    pix = page.get_pixmap()
+                    img = Image.open(io.BytesIO(pix.tobytes()))
+                    t = pytesseract.image_to_string(img, lang="ita")
+                testo += t + "\n"
+
+    elif ext.endswith((".xlsx", ".xls")):
+        try:
+            df = pd.read_excel(file_path)
+            testo = "\n".join(" ".join(map(str, row)) for row in df.values)
+        except Exception as e:
+            testo = f"Errore lettura Excel: {e}"
+
+    elif ext.endswith(".docx") and DOCX_AVAILABLE:
+        try:
+            doc = docx.Document(file_path)
+            testo = "\n".join([p.text for p in doc.paragraphs])
+        except Exception as e:
+            testo = f"Errore lettura Word: {e}"
+
+    elif ext.endswith(".txt"):
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
+            testo = f.read()
+
+    return testo.strip()
+
+def extract_all_values_smart(text):
+    keywords_map = {
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net income"],
+        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
+        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "PN", "Total equity"],
+        "Debiti": ["Liabilities", "Total liabilities", "Passivo", "Debiti totali"],
+        "Disponibilità": ["Disponibilità liquide", "Cash and cash equivalents", "Liquidità"],
+        "EBITDA": ["EBITDA", "Earnings Before Interest Taxes Depreciation"],
+        "EBIT": ["EBIT", "Earnings Before Interest and Taxes"],
+        "Interessi Passivi": ["Interest expense", "Oneri finanziari"],
+        "Rimanenze": ["Inventories", "Rimanenze finali", "Magazzino"],
+        "Crediti": ["Receivables", "Crediti", "Accounts receivable"],
+        "Debiti Breve": ["Current liabilities", "Debiti a breve"],
+        "Attivo Corrente": ["Current assets", "Attività correnti"]
+    }
+
+    risultati = {}
+    for key, synonyms in keywords_map.items():
+        confermato = check_valori_confermati(text, key)
+        if confermato is not None:
+            risultati[key] = confermato
+        else:
+            estratto = smart_extract_value(key, synonyms, text)
+            risultati[key] = estratto["valore"]
+
+    return risultati
+
 def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
 
-    text = ""
+    try:
+        text = estrai_testo_da_file(file_path)
+        debug_info["estratto"] = text[:2000]
+        data = extract_all_values_smart(text)
+    except Exception as e:
+        debug_info["errore"] = str(e)
 
-    # 📘 Word
-    if file_path.endswith(".docx"):
-        try:
-            import docx
-            doc = docx.Document(file_path)
-            text = "\n".join([p.text for p in doc.paragraphs])
-            debug_info["tipo_file"] = "WORD"
-        except Exception as e:
-            debug_info["errore"] = f"Errore lettura DOCX: {str(e)}"
-            return (data, debug_info) if return_debug else data
-
-    # 📄 TXT
-    elif file_path.endswith(".txt"):
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                text = f.read()
-            debug_info["tipo_file"] = "TXT"
-        except Exception as e:
-            debug_info["errore"] = f"Errore lettura TXT: {str(e)}"
-            return (data, debug_info) if return_debug else data
-
-    # 🧾 EXCEL
-    elif file_path.endswith((".xlsx", ".xls")):
-        try:
-            df = pd.read_excel(file_path)
-            data = {
-                "Ricavi": float(df.iloc[0].get("Ricavi", 0)),
-                "Costi": float(df.iloc[0].get("Costi", 0)),
-                "Utile Netto": float(df.iloc[0].get("Utile Netto", 0)),
-                "Totale Attivo": float(df.iloc[0].get("Totale Attivo", 0)),
-                "Patrimonio Netto": float(df.iloc[0].get("Patrimonio Netto", 0))
-            }
-            debug_info["tipo_file"] = "EXCEL"
-            debug_info["colonne"] = df.columns.tolist()
-            return (data, debug_info) if return_debug else data
-        except Exception as e:
-            debug_info["errore"] = f"Errore lettura Excel: {str(e)}"
-            return (data, debug_info) if return_debug else data
-
-    # 📑 PDF
-    elif file_path.endswith(".pdf"):
-        if PDFPLUMBER_AVAILABLE:
-            try:
-                import pdfplumber
-                with pdfplumber.open(file_path) as pdf:
-                    for page in pdf.pages:
-                        text += page.extract_text() or ""
-                        tables = page.extract_tables()
-                        for table in tables:
-                            for row in table:
-                                if row:
-                                    text += "\n" + " ".join([cell or "" for cell in row])
-                debug_info["tipo_file"] = "PDF (plumber)"
-            except Exception as e:
-                debug_info["errore"] = f"Errore pdfplumber: {str(e)}"
-
-        if not text:
-            try:
-                with fitz.open(file_path) as doc:
-                    for page in doc:
-                        t = page.get_text()
-                        if not t and OCR_AVAILABLE:
-                            pix = page.get_pixmap()
-                            img = Image.open(io.BytesIO(pix.tobytes()))
-                            t = pytesseract.image_to_string(img, lang="ita")
-                        text += t + "\n"
-                debug_info["tipo_file"] = "PDF (fitz)"
-            except Exception as e:
-                debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
-                return (data, debug_info) if return_debug else data
-
-    # ❌ Altro formato non supportato
-    else:
-        debug_info["errore"] = f"Formato non supportato: {file_path}"
-        return (data, debug_info) if return_debug else data
-
-    # 🧠 Estrazione dei dati con sistema smart
-    debug_info["estratto"] = text[:2000]
-    data = extract_all_values_smart(text)
     return (data, debug_info) if return_debug else data
-# === KPI ===
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
     utile = data.get("Utile Netto", 0)
     attivo = data.get("Totale Attivo", 1)
     pn = data.get("Patrimonio Netto", 1)
+    debiti = data.get("Debiti", 0)
+    disponibilita = data.get("Disponibilità", 0)
+    ebitda = data.get("EBITDA", 0)
+    ebit = data.get("EBIT", 0)
+    interessi = data.get("Interessi Passivi", 1)
+    crediti = data.get("Crediti", 1)
+    rimanenze = data.get("Rimanenze", 1)
+    debiti_breve = data.get("Debiti Breve", 1)
+    attivo_corrente = data.get("Attivo Corrente", 1)
 
     kpis = {
         "Margine Operativo (%)": round((ricavi - costi) / ricavi * 100, 2) if ricavi else 0,
         "Return on Equity (ROE)": round(utile / pn * 100, 2) if pn else 0,
         "Return on Assets (ROA)": round(utile / attivo * 100, 2) if attivo else 0,
         "Rapporto Ricavi/Attivo": round(ricavi / attivo, 2) if attivo else 0,
-        "Indice di Efficienza": round(utile / costi * 100, 2) if costi else 0
+        "Indice di Efficienza": round(utile / costi * 100, 2) if costi else 0,
+        "Debt/Equity": round(debiti / pn, 2) if pn else 0,
+        "Quick Ratio": round((disponibilita + crediti) / debiti_breve, 2) if debiti_breve else 0,
+        "Current Ratio": round(attivo_corrente / debiti_breve, 2) if debiti_breve else 0,
+        "EBITDA Margin": round(ebitda / ricavi * 100, 2) if ricavi else 0,
+        "EBIT Margin": round(ebit / ricavi * 100, 2) if ricavi else 0,
+        "Interest Coverage": round(ebit / interessi, 2) if interessi else 0,
+        "Rotazione Crediti": round(ricavi / crediti, 2) if crediti else 0,
+        "Rotazione Magazzino": round(costi / rimanenze, 2) if rimanenze else 0,
+        "Capitale Proprio/Attivo": round(pn / attivo, 2) if attivo else 0,
+        "Sustainable Growth (ROE x retention)": round((utile / ricavi) * (utile / pn) * 100, 2) if ricavi and pn else 0
     }
+
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
-# === Grafico KPI ===
 def plot_kpis(df_kpis):
-    fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
+    fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari Estesi", text="Valore")
     fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-    fig.update_layout(yaxis_title="Valore (%)", xaxis_title="", showlegend=False)
+    fig.update_layout(yaxis_title="Valore", xaxis_title="", showlegend=False)
     return fig
