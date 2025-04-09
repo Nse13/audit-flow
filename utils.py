@@ -40,6 +40,7 @@ def check_valori_confermati(text, chiave):
         if c.get("testo") and c["testo"] in text:
             return c["valore"]
     return None
+
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
@@ -50,7 +51,6 @@ def smart_extract_value(keyword, synonyms, text):
         found_term = next((term for term in all_terms if term in line_lower), None)
 
         if not found_term:
-            # Fuzzy fallback: trova il termine più simile
             for term in all_terms:
                 match = difflib.get_close_matches(term, [line_lower], cutoff=0.85)
                 if match:
@@ -66,7 +66,6 @@ def smart_extract_value(keyword, synonyms, text):
             except:
                 continue
 
-            # Conversione in milioni
             if "million" in line_lower or "milioni" in line_lower:
                 val *= 1_000_000
 
@@ -83,10 +82,10 @@ def smart_extract_value(keyword, synonyms, text):
             if val < 0 and any(x in line_lower for x in ["perdita", "costo"]): score += 1
             if any(x in line_lower for x in ["2023", "2022", "2024"]): score -= 3
             if "consolidated" in line_lower: score += 2
-            if "statement" in line_lower or "income" in line_lower or "balance" in line_lower: score += 2
+            if any(x in line_lower for x in ["statement", "income", "balance"]): score += 2
             if "note" in line_lower: score -= 2
             if "cash flow" in line_lower: score += 1
-            if "%" in line or "percent" in line_lower: score -= 1  # evitare percentuali errate
+            if "%" in line or "percent" in line_lower: score -= 1
 
             candidates.append({
                 "term": found_term,
@@ -97,11 +96,41 @@ def smart_extract_value(keyword, synonyms, text):
 
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
+
+def extract_all_values_smart(text):
+    keywords_map = {
+        # Conto economico
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net income"],
+        "EBITDA": ["EBITDA", "Margine operativo lordo"],
+        "EBIT": ["EBIT", "Risultato operativo", "Operating income"],
+        "Cash Flow Operativo": ["Cash Flow Operativo", "Operating cash flow", "Flusso di cassa operativo"],
+
+        # Stato patrimoniale
+        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
+        "Attivo Corrente": ["Attivo corrente", "Current assets"],
+        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "Total equity", "Equity"],
+        "Debiti a Breve": ["Debiti a breve", "Current liabilities"],
+        "Debiti a Lungo": ["Debiti a lungo", "Long-term debt", "Debiti finanziari a lungo termine"],
+        "Cash Equivalents": ["Disponibilità liquide", "Cash and cash equivalents", "Liquidità"]
+    }
+
+    risultati = {}
+    for key, synonyms in keywords_map.items():
+        confermato = check_valori_confermati(text, key)
+        if confermato is not None:
+            risultati[key] = confermato
+        else:
+            estratto = smart_extract_value(key, synonyms, text)
+            risultati[key] = estratto["valore"]
+
+    return risultati
+
 def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
 
-    # === PDF ===
     if file_path.endswith(".pdf"):
         text = ""
         try:
@@ -120,7 +149,6 @@ def extract_financial_data(file_path, return_debug=False):
         debug_info["estratto"] = text[:2000]
         data = extract_all_values_smart(text)
 
-    # === EXCEL ===
     elif file_path.endswith((".xlsx", ".xls")):
         try:
             df = pd.read_excel(file_path)
@@ -134,7 +162,6 @@ def extract_financial_data(file_path, return_debug=False):
         except Exception as e:
             debug_info["errore"] = f"Errore lettura Excel: {str(e)}"
 
-    # === FILE DI TESTO (txt, md, csv) ===
     elif file_path.endswith((".txt", ".md", ".csv")):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -144,7 +171,6 @@ def extract_financial_data(file_path, return_debug=False):
         except Exception as e:
             debug_info["errore"] = f"Errore apertura file testo: {str(e)}"
 
-    # === WORD (.docx) ===
     elif file_path.endswith(".docx"):
         try:
             import docx
@@ -159,38 +185,7 @@ def extract_financial_data(file_path, return_debug=False):
         debug_info["errore"] = f"Formato non supportato: {file_path}"
 
     return (data, debug_info) if return_debug else data
-def extract_all_values_smart(text):
-    keywords_map = {
-        # Conto economico
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues"],
-        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
-        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net income"],
-        "EBITDA": ["EBITDA", "Margine operativo lordo"],
-        "EBIT": ["EBIT", "Risultato operativo", "Operating income"],
-        "Cash Flow Operativo": ["Cash Flow Operativo", "Operating cash flow", "Flusso di cassa operativo"],
 
-        # Stato patrimoniale
-        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
-        "Attivo Corrente": ["Attivo corrente", "Current assets"],
-        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "Total equity", "Equity"],
-        "Debiti a Breve": ["Debiti a breve", "Current liabilities"],
-        "Debiti a Lungo": ["Debiti a lungo", "Long-term debt", "Debiti finanziari a lungo termine"],
-        "Cash Equivalents": ["Disponibilità liquide", "Cash and cash equivalents", "Liquidità"]
-
-        # Altre voci in futuro si possono aggiungere facilmente qui
-    }
-
-    risultati = {}
-    for key, synonyms in keywords_map.items():
-        # Controlla se il valore è già stato confermato manualmente
-        confermato = check_valori_confermati(text, key)
-        if confermato is not None:
-            risultati[key] = confermato
-        else:
-            estratto = smart_extract_value(key, synonyms, text)
-            risultati[key] = estratto["valore"]
-
-    return risultati
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
@@ -208,38 +203,28 @@ def calculate_kpis(data):
     proventi_fin = data.get("Proventi Finanziari", 0)
 
     kpis = {
-        # 🔹 Redditività
         "Margine Operativo (%)": round((ricavi - costi) / ricavi * 100, 2) if ricavi else 0,
         "EBITDA Margin (%)": round(ebitda / ricavi * 100, 2) if ricavi else 0,
         "EBIT Margin (%)": round(ebit / ricavi * 100, 2) if ricavi else 0,
         "Return on Equity (ROE)": round(utile / pn * 100, 2) if pn else 0,
         "Return on Assets (ROA)": round(utile / attivo * 100, 2) if attivo else 0,
-
-        # 🔹 Liquidità
         "Current Ratio": round(attivo_corrente / debiti_brevi, 2) if debiti_brevi else 0,
         "Cash Ratio": round(cash_equivalents / debiti_brevi, 2) if debiti_brevi else 0,
-
-        # 🔹 Leva finanziaria
         "Debt to Equity": round((debiti_brevi + debiti_lunghi) / pn, 2) if pn else 0,
         "Debt to Assets": round((debiti_brevi + debiti_lunghi) / attivo, 2) if attivo else 0,
-
-        # 🔹 Efficienza
         "Indice di Efficienza (%)": round(utile / costi * 100, 2) if costi else 0,
         "Ricavi / Totale Attivo": round(ricavi / attivo, 2) if attivo else 0,
         "Copertura Interessi": round(ebit / oneri_fin, 2) if oneri_fin else 0,
-
-        # 🔹 Cash Flow
         "Cash Flow su Utile Netto": round(cash_flow / utile, 2) if utile else 0,
         "Cash Flow su Ricavi": round(cash_flow / ricavi, 2) if ricavi else 0,
         "Cash Flow Margin (%)": round(cash_flow / ricavi * 100, 2) if ricavi else 0,
-
-        # 🔹 Indicatori personalizzati
         "Capacità di autofinanziamento": round((utile + cash_flow) / ricavi * 100, 2) if ricavi else 0,
         "Indice di solidità patrimoniale": round(pn / attivo, 2) if attivo else 0,
         "Margine di struttura": round(pn - debiti_lunghi, 2)
     }
 
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
+
 def plot_kpis(df_kpis):
     fig = px.bar(
         df_kpis,
@@ -260,6 +245,7 @@ def plot_kpis(df_kpis):
         margin=dict(l=20, r=20, t=50, b=100)
     )
     return fig
+
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
@@ -309,8 +295,9 @@ def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.p
 def genera_commento_ai(data):
     import openai
     openai.api_key = os.environ.get("OPENAI_API_KEY")
-if not os.environ.get("OPENAI_API_KEY"):
-    return "⚠️ Nessuna API key trovata. Impossibile generare commento."
+
+    if not openai.api_key:
+        return "⚠️ Nessuna API key trovata. Impossibile generare commento."
 
     prompt = f"""
 Sei un revisore contabile esperto. Analizza i seguenti dati estratti da un bilancio e fornisci una breve valutazione finanziaria:
