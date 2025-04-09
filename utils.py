@@ -208,4 +208,23 @@ def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.p
 
     if commento:
         y -= 30
-        c.setFont("Helvetica
+        c.setFont("Helvetica)
+def genera_commento_ai(data):
+    import openai
+    openai.api_key = os.environ.get("OPENAI_API_KEY")
+    prompt = f"""Analizza i seguenti dati di bilancio:
+{json.dumps(data, indent=2)}
+Rispondi con un'analisi sintetica come se fossi un revisore contabile professionista."""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Sei un esperto di auditing finanziario."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            max_tokens=400
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Errore generazione commento: {str(e)}"
