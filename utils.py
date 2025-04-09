@@ -36,8 +36,7 @@ def check_valori_confermati(text, chiave):
         return None
     with open(CONFIRMATION_DB) as f:
         db = json.load(f)
-    candidati = db.get(chiave, [])
-    for c in candidati:
+    for c in db.get(chiave, []):
         if c.get("testo") and c["testo"] in text:
             return c["valore"]
     return None
@@ -98,24 +97,100 @@ def smart_extract_value(keyword, synonyms, text):
 
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
-elif file_path.endswith(('.txt', '.md', '.csv')):
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            text = f.read()
-            debug_info["estratto"] = text[:2000]
-            data = extract_all_values_smart(text)
-    except Exception as e:
-        debug_info["errore"] = f"Errore apertura file testo: {str(e)}"
+def extract_financial_data(file_path, return_debug=False):
+    debug_info = {}
+    data = {}
 
-elif file_path.endswith(".docx"):
-    try:
-        import docx
-        doc = docx.Document(file_path)
-        text = "\n".join([para.text for para in doc.paragraphs])
+    # === PDF ===
+    if file_path.endswith(".pdf"):
+        text = ""
+        try:
+            with fitz.open(file_path) as doc:
+                for page in doc:
+                    t = page.get_text()
+                    if not t and OCR_AVAILABLE:
+                        pix = page.get_pixmap()
+                        img = Image.open(io.BytesIO(pix.tobytes()))
+                        t = pytesseract.image_to_string(img, lang="ita")
+                    text += t + "\n"
+        except Exception as e:
+            debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
+            return (data, debug_info) if return_debug else data
+
         debug_info["estratto"] = text[:2000]
         data = extract_all_values_smart(text)
-    except Exception as e:
-        debug_info["errore"] = f"Errore lettura Word: {str(e)}"
+
+    # === EXCEL ===
+    elif file_path.endswith((".xlsx", ".xls")):
+        try:
+            df = pd.read_excel(file_path)
+            data = {
+                "Ricavi": float(df.iloc[0].get("Ricavi", 0)),
+                "Costi": float(df.iloc[0].get("Costi", 0)),
+                "Utile Netto": float(df.iloc[0].get("Utile Netto", 0)),
+                "Totale Attivo": float(df.iloc[0].get("Totale Attivo", 0)),
+                "Patrimonio Netto": float(df.iloc[0].get("Patrimonio Netto", 0))
+            }
+        except Exception as e:
+            debug_info["errore"] = f"Errore lettura Excel: {str(e)}"
+
+    # === FILE DI TESTO (txt, md, csv) ===
+    elif file_path.endswith((".txt", ".md", ".csv")):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                text = f.read()
+                debug_info["estratto"] = text[:2000]
+                data = extract_all_values_smart(text)
+        except Exception as e:
+            debug_info["errore"] = f"Errore apertura file testo: {str(e)}"
+
+    # === WORD (.docx) ===
+    elif file_path.endswith(".docx"):
+        try:
+            import docx
+            doc = docx.Document(file_path)
+            text = "\n".join([para.text for para in doc.paragraphs])
+            debug_info["estratto"] = text[:2000]
+            data = extract_all_values_smart(text)
+        except Exception as e:
+            debug_info["errore"] = f"Errore lettura Word: {str(e)}"
+
+    else:
+        debug_info["errore"] = f"Formato non supportato: {file_path}"
+
+    return (data, debug_info) if return_debug else data
+def extract_all_values_smart(text):
+    keywords_map = {
+        # Conto economico
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues"],
+        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net income"],
+        "EBITDA": ["EBITDA", "Margine operativo lordo"],
+        "EBIT": ["EBIT", "Risultato operativo", "Operating income"],
+        "Cash Flow Operativo": ["Cash Flow Operativo", "Operating cash flow", "Flusso di cassa operativo"],
+
+        # Stato patrimoniale
+        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
+        "Attivo Corrente": ["Attivo corrente", "Current assets"],
+        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "Total equity", "Equity"],
+        "Debiti a Breve": ["Debiti a breve", "Current liabilities"],
+        "Debiti a Lungo": ["Debiti a lungo", "Long-term debt", "Debiti finanziari a lungo termine"],
+        "Cash Equivalents": ["Disponibilità liquide", "Cash and cash equivalents", "Liquidità"]
+
+        # Altre voci in futuro si possono aggiungere facilmente qui
+    }
+
+    risultati = {}
+    for key, synonyms in keywords_map.items():
+        # Controlla se il valore è già stato confermato manualmente
+        confermato = check_valori_confermati(text, key)
+        if confermato is not None:
+            risultati[key] = confermato
+        else:
+            estratto = smart_extract_value(key, synonyms, text)
+            risultati[key] = estratto["valore"]
+
+    return risultati
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
@@ -133,51 +208,58 @@ def calculate_kpis(data):
     proventi_fin = data.get("Proventi Finanziari", 0)
 
     kpis = {
-        # Redditività
+        # 🔹 Redditività
         "Margine Operativo (%)": round((ricavi - costi) / ricavi * 100, 2) if ricavi else 0,
         "EBITDA Margin (%)": round(ebitda / ricavi * 100, 2) if ricavi else 0,
         "EBIT Margin (%)": round(ebit / ricavi * 100, 2) if ricavi else 0,
         "Return on Equity (ROE)": round(utile / pn * 100, 2) if pn else 0,
         "Return on Assets (ROA)": round(utile / attivo * 100, 2) if attivo else 0,
 
-        # Liquidità e solvibilità
+        # 🔹 Liquidità
         "Current Ratio": round(attivo_corrente / debiti_brevi, 2) if debiti_brevi else 0,
         "Cash Ratio": round(cash_equivalents / debiti_brevi, 2) if debiti_brevi else 0,
 
-        # Leva finanziaria
+        # 🔹 Leva finanziaria
         "Debt to Equity": round((debiti_brevi + debiti_lunghi) / pn, 2) if pn else 0,
         "Debt to Assets": round((debiti_brevi + debiti_lunghi) / attivo, 2) if attivo else 0,
 
-        # Efficienza e performance
+        # 🔹 Efficienza
         "Indice di Efficienza (%)": round(utile / costi * 100, 2) if costi else 0,
         "Ricavi / Totale Attivo": round(ricavi / attivo, 2) if attivo else 0,
         "Copertura Interessi": round(ebit / oneri_fin, 2) if oneri_fin else 0,
 
-        # Cash Flow
+        # 🔹 Cash Flow
         "Cash Flow su Utile Netto": round(cash_flow / utile, 2) if utile else 0,
         "Cash Flow su Ricavi": round(cash_flow / ricavi, 2) if ricavi else 0,
         "Cash Flow Margin (%)": round(cash_flow / ricavi * 100, 2) if ricavi else 0,
 
-        # Indicatori personalizzati
+        # 🔹 Indicatori personalizzati
         "Capacità di autofinanziamento": round((utile + cash_flow) / ricavi * 100, 2) if ricavi else 0,
         "Indice di solidità patrimoniale": round(pn / attivo, 2) if attivo else 0,
         "Margine di struttura": round(pn - debiti_lunghi, 2)
     }
 
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
-# === KPI Chart ===
 def plot_kpis(df_kpis):
-    fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
-    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+    fig = px.bar(
+        df_kpis,
+        x="KPI",
+        y="Valore",
+        title="📊 KPI Finanziari",
+        text="Valore"
+    )
+    fig.update_traces(
+        texttemplate='%{text:.2f}',
+        textposition='outside'
+    )
     fig.update_layout(
         yaxis_title="Valore",
         xaxis_title="",
         showlegend=False,
-        height=600
+        height=600,
+        margin=dict(l=20, r=20, t=50, b=100)
     )
     return fig
-
-# === Report PDF ===
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
@@ -186,45 +268,75 @@ def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.p
     width, height = A4
 
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(40, height - 50, "Audit Flow+ - Report Analisi Bilancio")
+    c.drawString(40, height - 50, "📊 Audit Flow+ - Report Analisi Bilancio")
 
     c.setFont("Helvetica", 11)
     y = height - 80
     for k, v in data.items():
         c.drawString(40, y, f"{k}: {v:,.2f}")
         y -= 16
+        if y < 60:
+            c.showPage()
+            y = height - 50
 
     y -= 20
     c.setFont("Helvetica-Bold", 13)
-    c.drawString(40, y, "KPI Calcolati")
+    c.drawString(40, y, "📈 KPI Calcolati")
     y -= 20
     c.setFont("Helvetica", 10)
     for _, row in df_kpis.iterrows():
         c.drawString(50, y, f"{row['KPI']}: {row['Valore']}")
         y -= 15
-        if y < 50:
+        if y < 60:
             c.showPage()
             y = height - 50
 
     if commento:
         y -= 30
-        c.setFont("Helvetica)
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(40, y, "🧠 Commento AuditLLM")
+        y -= 20
+        c.setFont("Helvetica", 9)
+        for line in commento.split("\n"):
+            c.drawString(50, y, line)
+            y -= 13
+            if y < 60:
+                c.showPage()
+                y = height - 50
+
+    c.save()
+if st.button("📥 Scarica report PDF"):
+    generate_pdf_report(updated_data, df_kpis, commento_ai)
+    with open("report_auditflow.pdf", "rb") as f:
+        st.download_button("⬇️ Scarica Report", f, file_name="report_auditflow.pdf")
 def genera_commento_ai(data):
     import openai
     openai.api_key = os.environ.get("OPENAI_API_KEY")
-    prompt = f"""Analizza i seguenti dati di bilancio:
+
+    prompt = f"""
+Sei un revisore contabile esperto. Analizza i seguenti dati estratti da un bilancio e fornisci una breve valutazione finanziaria:
+
 {json.dumps(data, indent=2)}
-Rispondi con un'analisi sintetica come se fossi un revisore contabile professionista."""
+
+Concentrati su:
+- Redditività
+- Solidità patrimoniale
+- Liquidità e rischio finanziario
+- Eventuali segnali di allerta
+
+Scrivi in modo professionale e sintetico.
+"""
+
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Sei un esperto di auditing finanziario."},
+                {"role": "system", "content": "Sei un revisore esperto che redige commenti di audit."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.4,
+            temperature=0.3,
             max_tokens=400
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"Errore generazione commento: {str(e)}"
+        return f"Errore nella generazione del commento: {str(e)}"
