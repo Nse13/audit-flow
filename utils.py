@@ -309,6 +309,8 @@ def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.p
 def genera_commento_ai(data):
     import openai
     openai.api_key = os.environ.get("OPENAI_API_KEY")
+if not os.environ.get("OPENAI_API_KEY"):
+    return "⚠️ Nessuna API key trovata. Impossibile generare commento."
 
     prompt = f"""
 Sei un revisore contabile esperto. Analizza i seguenti dati estratti da un bilancio e fornisci una breve valutazione finanziaria:
