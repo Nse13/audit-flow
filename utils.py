@@ -305,10 +305,7 @@ def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.p
                 y = height - 50
 
     c.save()
-if st.button("📥 Scarica report PDF"):
-    generate_pdf_report(updated_data, df_kpis, commento_ai)
-    with open("report_auditflow.pdf", "rb") as f:
-        st.download_button("⬇️ Scarica Report", f, file_name="report_auditflow.pdf")
+
 def genera_commento_ai(data):
     import openai
     openai.api_key = os.environ.get("OPENAI_API_KEY")
