@@ -4,14 +4,14 @@ import sys
 sys.path.append("..")
 
 from utils import (
-    extract_financial_data, 
-    calculate_kpis, 
-    plot_kpis, 
-    salva_valore_confermato, 
-    generate_pdf_report, 
-    confronta_anni,
+    extract_financial_data,
+    calculate_kpis,
+    plot_kpis,
+    salva_valore_confermato,
+    generate_pdf_report,
     genera_commento_ai
 )
+
 
 st.title("📊 Analisi Bilanci Avanzata")
 
