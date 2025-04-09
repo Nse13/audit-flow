@@ -165,3 +165,47 @@ def calculate_kpis(data):
     }
 
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
+# === KPI Chart ===
+def plot_kpis(df_kpis):
+    fig = px.bar(df_kpis, x="KPI", y="Valore", title="KPI Finanziari", text="Valore")
+    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+    fig.update_layout(
+        yaxis_title="Valore",
+        xaxis_title="",
+        showlegend=False,
+        height=600
+    )
+    return fig
+
+# === Report PDF ===
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+
+def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.pdf"):
+    c = canvas.Canvas(filename, pagesize=A4)
+    width, height = A4
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(40, height - 50, "Audit Flow+ - Report Analisi Bilancio")
+
+    c.setFont("Helvetica", 11)
+    y = height - 80
+    for k, v in data.items():
+        c.drawString(40, y, f"{k}: {v:,.2f}")
+        y -= 16
+
+    y -= 20
+    c.setFont("Helvetica-Bold", 13)
+    c.drawString(40, y, "KPI Calcolati")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    for _, row in df_kpis.iterrows():
+        c.drawString(50, y, f"{row['KPI']}: {row['Valore']}")
+        y -= 15
+        if y < 50:
+            c.showPage()
+            y = height - 50
+
+    if commento:
+        y -= 30
+        c.setFont("Helvetica
