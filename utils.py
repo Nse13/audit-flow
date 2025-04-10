@@ -181,7 +181,9 @@ def extract_financial_data(file_path, return_debug=False):
             debug_info["errore"] = f"Errore lettura Word: {str(e)}"
 
     else:
-        debug_info["errore"] = f"Formato non supportato: {file_path}"
+    estensione = os.path.splitext(file_path)[1]
+    debug_info["errore"] = f"⚠️ Formato non supportato: {estensione if estensione else 'nessuna estensione rilevata'}"
+
 
     return (data, debug_info) if return_debug else data
 
