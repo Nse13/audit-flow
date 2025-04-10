@@ -21,13 +21,11 @@ use_debug = st.checkbox("📌 Mostra debug")
 use_llm = st.checkbox("🤖 Usa AuditLLM (se attivo)")
 
 if uploaded_file:
-    # 📁 Salva con estensione corretta
     file_ext = os.path.splitext(uploaded_file.name)[1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
         tmp_file.write(uploaded_file.read())
         file_path = tmp_file.name
 
-    # 📊 Estrai i dati
     data, debug = extract_financial_data(file_path, return_debug=True)
 
     st.subheader("📄 Dati estratti automaticamente")
@@ -49,7 +47,6 @@ if uploaded_file:
     st.dataframe(df_kpis)
     st.plotly_chart(plot_kpis(df_kpis))
 
-    # 🧠 Commento AI
     commento = ""
     if use_llm:
         with st.spinner("Generazione commento AI in corso..."):
@@ -57,13 +54,11 @@ if uploaded_file:
             st.subheader("🧠 Commento AuditLLM")
             st.write(commento)
 
-    # 📥 Esporta PDF
     if st.button("📤 Scarica report PDF"):
         generate_pdf_report(updated_data, df_kpis, commento)
         with open("report_auditflow.pdf", "rb") as f:
             st.download_button("⬇️ Clicca per scaricare il PDF", f, file_name="report_auditflow.pdf")
 
-    # 🔧 Simulatore
     if st.checkbox("🧪 Simula 'What if...'"):
         st.subheader("🔧 Simulazione KPI con valori ipotetici")
         dati_sim = {}
@@ -73,7 +68,6 @@ if uploaded_file:
         st.dataframe(calculate_kpis(dati_sim))
         st.plotly_chart(plot_kpis(calculate_kpis(dati_sim)))
 
-    # 🔁 Confronto Multi-file
     if st.checkbox("📂 Confronta più bilanci"):
         uploaded_files = st.file_uploader("Carica più bilanci", type=["pdf", "xlsx"], accept_multiple_files=True)
         dati_annuali = {}
@@ -90,7 +84,6 @@ if uploaded_file:
             st.subheader("📊 Confronto KPI tra anni / aziende")
             st.dataframe(df_confronto)
 
-    # 🔍 Debug
     if use_debug:
         st.subheader("🔍 Debug - Testo grezzo estratto")
         st.json(debug)
