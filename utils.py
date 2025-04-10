@@ -66,7 +66,9 @@ def smart_extract_value(keyword, synonyms, text):
             except:
                 continue
 
-            if "million" in line_lower or "milioni" in line_lower:
+            if "billion" in line_lower or "miliardi" in line_lower:
+                val *= 1_000_000_000
+            elif "million" in line_lower or "milioni" in line_lower:
                 val *= 1_000_000
 
             score = 0
@@ -99,15 +101,12 @@ def smart_extract_value(keyword, synonyms, text):
 
 def extract_all_values_smart(text):
     keywords_map = {
-        # Conto economico
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues"],
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues", "Total revenues", "Revenues"],
         "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
-        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net income"],
+        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net income", "Net profit"],
         "EBITDA": ["EBITDA", "Margine operativo lordo"],
-        "EBIT": ["EBIT", "Risultato operativo", "Operating income"],
-        "Cash Flow Operativo": ["Cash Flow Operativo", "Operating cash flow", "Flusso di cassa operativo"],
-
-        # Stato patrimoniale
+        "EBIT": ["EBIT", "Risultato operativo", "Operating income", "Operating profit", "Adjusted operating income", "AOI"],
+        "Cash Flow Operativo": ["Cash Flow Operativo", "Operating cash flow", "Flusso di cassa operativo", "Net cash from operating activities"],
         "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
         "Attivo Corrente": ["Attivo corrente", "Current assets"],
         "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "Total equity", "Equity"],
