@@ -20,11 +20,15 @@ use_debug = st.checkbox("📌 Mostra debug")
 use_llm = st.checkbox("🤖 Usa AuditLLM (se attivo)")
 
 if uploaded_file:
-    file_path = "temp_uploaded_file"
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.read())
+   import tempfile
 
-    data, debug = extract_financial_data(file_path, return_debug=True)
+file_ext = os.path.splitext(uploaded_file.name)[1]
+
+with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+    tmp_file.write(uploaded_file.read())
+    file_path = tmp_file.name
+
+data, debug = extract_financial_data(file_path, return_debug=True)
 
     st.subheader("📄 Dati estratti automaticamente")
     st.json(data)
