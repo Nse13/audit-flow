@@ -1,6 +1,8 @@
 import streamlit as st
 import os
 import sys
+import tempfile
+
 sys.path.append("..")
 
 from utils import (
@@ -12,7 +14,6 @@ from utils import (
     genera_commento_ai
 )
 
-
 st.title("📊 Analisi Bilanci Avanzata")
 
 uploaded_file = st.file_uploader("Carica bilancio PDF, Excel, TXT o CSV", type=["pdf", "xlsx", "xls", "txt", "csv"])
@@ -20,15 +21,14 @@ use_debug = st.checkbox("📌 Mostra debug")
 use_llm = st.checkbox("🤖 Usa AuditLLM (se attivo)")
 
 if uploaded_file:
-   import tempfile
+    # 📁 Salva con estensione corretta
+    file_ext = os.path.splitext(uploaded_file.name)[1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        file_path = tmp_file.name
 
-file_ext = os.path.splitext(uploaded_file.name)[1]
-
-with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
-    tmp_file.write(uploaded_file.read())
-    file_path = tmp_file.name
-
-data, debug = extract_financial_data(file_path, return_debug=True)
+    # 📊 Estrai i dati
+    data, debug = extract_financial_data(file_path, return_debug=True)
 
     st.subheader("📄 Dati estratti automaticamente")
     st.json(data)
@@ -79,13 +79,14 @@ data, debug = extract_financial_data(file_path, return_debug=True)
         dati_annuali = {}
         for f in uploaded_files:
             nome = f.name.split(".")[0]
-            with open("temp_multi", "wb") as tmp:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(f.name)[1]) as tmp:
                 tmp.write(f.read())
-            dati, _ = extract_financial_data("temp_multi", return_debug=False)
+                temp_path = tmp.name
+            dati, _ = extract_financial_data(temp_path, return_debug=False)
             dati_annuali[nome] = dati
 
         if dati_annuali:
-            df_confronto = confronta_anni(dati_annuali)
+            df_confronto = calculate_kpis(dati_annuali[list(dati_annuali.keys())[0]])  # Placeholder
             st.subheader("📊 Confronto KPI tra anni / aziende")
             st.dataframe(df_confronto)
 
