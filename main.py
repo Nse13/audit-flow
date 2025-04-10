@@ -1,30 +1,47 @@
 import streamlit as st
+import tempfile
+import os
+from utils import extract_financial_data, calculate_kpis, plot_kpis, generate_pdf_report, genera_commento_ai
 
-st.set_page_config(
-    page_title="Audit Flow+",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="Audit Flow+", layout="wide")
+st.title("📊 Audit Flow+ - Analisi Automatica del Bilancio")
 
-st.title("📊 Audit Flow+")
-st.markdown("Benvenuto nella dashboard centrale dell'applicazione **Audit Flow+**.")
-st.markdown("Utilizza il menu a sinistra per navigare tra le sezioni:")
+uploaded_file = st.file_uploader("📁 Carica un bilancio (PDF, Excel, Word, testo)", type=["pdf", "xlsx", "xls", "csv", "txt", "docx"])
 
-st.markdown("""
-- 📂 **Movimenti Gestionali**  
-  Carica fatture, estratti conto e cassa per analisi contabile.
+if uploaded_file is not None:
+    file_ext = os.path.splitext(uploaded_file.name)[1]
 
-- 🧾 **Analisi Bilanci**  
-  Carica PDF o Excel per calcolo KPI, analisi comparativa e commento GPT.
+    with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        temp_file_path = tmp_file.name
 
-- 🧭 **Pianificazione Audit**  
-  Imposta soglie di materialità e aree critiche da controllare.
+    st.subheader("🔎 Debug - Testo grezzo estratto")
+    data, debug = extract_financial_data(temp_file_path, return_debug=True)
+    st.json(debug)
 
-- 📝 **Report & KPI**  
-  Visualizza i risultati e genera il report finale in PDF.
+    st.subheader("📄 Dati estratti automaticamente")
+    st.json(data)
 
----
+    st.subheader("🛠️ Correggi manualmente i valori (opzionale)")
+    for k in data:
+        new_val = st.text_input(f"{k}", value=str(data[k]))
+        try:
+            data[k] = float(new_val.replace(",", "."))
+        except:
+            pass
 
-👈 Se non vedi il menu laterale, clicca sull’icona in alto a sinistra.
-""")
+    st.subheader("📈 KPI Calcolati")
+    df_kpis = calculate_kpis(data)
+    st.dataframe(df_kpis)
 
+    st.plotly_chart(plot_kpis(df_kpis))
+
+    commento = ""
+    if st.checkbox("🤖 Genera commento AI con AuditLLM (GPT)"):
+        commento = genera_commento_ai(data)
+        st.text_area("📝 Commento generato", commento, height=250)
+
+    if st.button("📥 Scarica report PDF"):
+        generate_pdf_report(data, df_kpis, commento)
+        with open("report_auditflow.pdf", "rb") as f:
+            st.download_button("📄 Download Report", f, file_name="report_auditflow.pdf")
