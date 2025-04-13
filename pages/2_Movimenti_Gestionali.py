@@ -26,13 +26,34 @@ if os.path.exists(DATA_FILE):
 st.subheader("➕ Aggiungi un nuovo movimento")
 
 with st.form("aggiungi_movimento"):
-    codice = st.selectbox("Codice movimento", ["OIC_01", "OIC_02", "OIC_03", "IAS_01", "IFRS_15"])
-    descrizione = st.selectbox("Descrizione", ["Fattura attiva", "Fattura passiva", "Pagamento cliente", "Pagamento fornitore", "Incasso", "Bonifico", "Versamento", "Prelievo"])
-    categoria = st.selectbox("Categoria", ["Vendite", "Acquisti", "Finanziamenti", "Cassa", "Banca"])
+    # Mappatura descrizione → categoria
+    mappa_descrizione_categoria = {
+        "Fattura attiva": "Vendite",
+        "Fattura passiva": "Acquisti",
+        "Pagamento cliente": "Cassa",
+        "Pagamento fornitore": "Cassa",
+        "Incasso": "Banca",
+        "Bonifico": "Banca",
+        "Versamento": "Finanziamenti",
+        "Prelievo": "Finanziamenti"
+    }
+
+    codici_possibili = ["OIC_01", "OIC_02", "IAS_01", "IFRS_15"]
+    descrizioni_possibili = list(mappa_descrizione_categoria.keys())
+    valute_possibili = ["EUR", "USD", "GBP", "CHF"]
+    standard_possibili = ["OIC", "IAS", "IFRS"]
+
+    codice = st.selectbox("Codice movimento", codici_possibili)
+    descrizione = st.selectbox("Descrizione", descrizioni_possibili)
+
+    # Seleziona la categoria predefinita in base alla descrizione
+    categoria_default = mappa_descrizione_categoria.get(descrizione, "Cassa")
+    categoria = st.selectbox("Categoria", ["Vendite", "Acquisti", "Finanziamenti", "Cassa", "Banca"], index=["Vendite", "Acquisti", "Finanziamenti", "Cassa", "Banca"].index(categoria_default))
+
     data = st.date_input("Data", value=datetime.date.today())
     importo = st.number_input("Importo", step=100.0)
-    valuta = st.selectbox("Valuta", ["EUR", "USD", "GBP", "CHF"])
-    standard = st.selectbox("Standard", ["OIC", "IAS", "IFRS"])
+    valuta = st.selectbox("Valuta", valute_possibili)
+    standard = st.selectbox("Standard", standard_possibili)
     submitted = st.form_submit_button("Aggiungi movimento")
 
 
