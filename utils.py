@@ -104,6 +104,10 @@ def smart_extract_value(keyword, synonyms, text):
 
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
+best = sorted(candidates, key=lambda x: x["score"], reverse=True)
+if return_debug:
+    return best  # tutte le righe candidate
+return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
 
 
 
