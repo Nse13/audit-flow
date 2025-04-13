@@ -172,25 +172,24 @@ def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
     data = {}
 
-   if file_path.endswith(".pdf"):
-    text = ""
-    try:
-        with fitz.open(file_path) as doc:
-            for page in doc:
-                t = page.get_text()
-                if not t and OCR_AVAILABLE:
-                    pix = page.get_pixmap()
-                    img = Image.open(io.BytesIO(pix.tobytes()))
-                    t = pytesseract.image_to_string(img, lang="ita")
-                text += t + "\n"
-    except Exception as e:
-        debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
-        return (data, debug_info) if return_debug else data
+    if file_path.endswith(".pdf"):
+        text = ""
+        try:
+            with fitz.open(file_path) as doc:
+                for page in doc:
+                    t = page.get_text()
+                    if not t and OCR_AVAILABLE:
+                        pix = page.get_pixmap()
+                        img = Image.open(io.BytesIO(pix.tobytes()))
+                        t = pytesseract.image_to_string(img, lang="ita")
+                    text += t + "\n"
+        except Exception as e:
+            debug_info["errore"] = f"Errore apertura PDF: {str(e)}"
+            return (data, debug_info) if return_debug else data
 
-    debug_info["estratto"] = text[:2000]
-    data, debug_righe = extract_all_values_smart(text, return_debug=True)
-    debug_info["righe_candidate"] = debug_righe
-
+        debug_info["estratto"] = text[:2000]
+        data, debug_righe = extract_all_values_smart(text, return_debug=True)
+        debug_info["righe_candidate"] = debug_righe
 
     elif file_path.endswith((".xlsx", ".xls")):
         try:
@@ -210,7 +209,8 @@ def extract_financial_data(file_path, return_debug=False):
             with open(file_path, "r", encoding="utf-8") as f:
                 text = f.read()
                 debug_info["estratto"] = text[:2000]
-                data = extract_all_values_smart(text)
+                data, debug_righe = extract_all_values_smart(text, return_debug=True)
+                debug_info["righe_candidate"] = debug_righe
         except Exception as e:
             debug_info["errore"] = f"Errore apertura file testo: {str(e)}"
 
@@ -220,7 +220,8 @@ def extract_financial_data(file_path, return_debug=False):
             doc = docx.Document(file_path)
             text = "\n".join([para.text for para in doc.paragraphs])
             debug_info["estratto"] = text[:2000]
-            data = extract_all_values_smart(text)
+            data, debug_righe = extract_all_values_smart(text, return_debug=True)
+            debug_info["righe_candidate"] = debug_righe
         except Exception as e:
             debug_info["errore"] = f"Errore lettura Word: {str(e)}"
 
