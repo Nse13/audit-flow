@@ -232,6 +232,7 @@ def extract_financial_data(file_path, return_debug=False):
     return (data, debug_info) if return_debug else data
 
 
+
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
