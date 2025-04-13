@@ -42,6 +42,22 @@ def check_valori_confermati(text, chiave):
             return c["valore"]
     return None
 
+def get_statistiche_confermate():
+    if not os.path.exists(CONFIRMATION_DB):
+        return {}
+    with open(CONFIRMATION_DB) as f:
+        db = json.load(f)
+    return {k: len(v) for k, v in db.items()}
+
+def is_valore_confermato(text, chiave):
+    if not os.path.exists(CONFIRMATION_DB):
+        return False
+    with open(CONFIRMATION_DB) as f:
+        db = json.load(f)
+    for c in db.get(chiave, []):
+        if c.get("testo") and c["testo"] in text:
+            return True
+    return False
 
 
 
