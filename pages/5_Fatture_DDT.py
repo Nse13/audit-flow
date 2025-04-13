@@ -4,14 +4,16 @@ import datetime
 import os
 import sys
 
+# Collegamento al modulo gestionale
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from gestionale.fatture import Documento, RegistroDocumenti
 
-st.title("📄 Fatture e DDT")
+st.title("📄 Fatture e Documenti di Trasporto")
 
 DOCUMENTI_FILE = "documenti.json"
 registro = RegistroDocumenti()
 
+# Caricamento documenti esistenti
 if os.path.exists(DOCUMENTI_FILE):
     registro.carica_da_file(DOCUMENTI_FILE)
 
@@ -39,15 +41,29 @@ with st.form("form_doc"):
         registro.salva_su_file(DOCUMENTI_FILE)
         st.success("✅ Documento salvato correttamente!")
 
-st.subheader("📑 Elenco documenti registrati")
+st.markdown("### 🔍 Ricerca Fattura o DDT")
+
+criterio = st.selectbox("Cerca per", ["Numero", "Cliente/Fornitore"])
+chiave = st.text_input("Inserisci il valore da cercare")
+
+if chiave:
+    risultati = []
+    for d in registro.documenti:
+        dati = d.to_dict()
+        if criterio == "Numero" and chiave.lower() in str(dati.get("Numero", "")).lower():
+            risultati.append(dati)
+        elif criterio == "Cliente/Fornitore" and chiave.lower() in dati.get("Cliente/Fornitore", "").lower():
+            risultati.append(dati)
+
+    if risultati:
+        st.success(f"Trovati {len(risultati)} documenti:")
+        st.dataframe(risultati, use_container_width=True)
+    else:
+        st.warning("Nessuna corrispondenza trovata.")
+
+st.markdown("### 📑 Elenco documenti registrati")
 
 if registro.documenti:
     st.dataframe(registro.to_list(), use_container_width=True)
 else:
     st.info("Nessun documento registrato.")
-st.markdown("### 📄 Elenco Fatture e DDT registrati")
-
-if registro_fatture.fatture:
-    st.dataframe([f.to_dict() for f in registro_fatture.fatture], use_container_width=True)
-else:
-    st.info("Nessuna fattura o documento registrato.")
