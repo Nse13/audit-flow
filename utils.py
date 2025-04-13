@@ -42,6 +42,11 @@ def check_valori_confermati(text, chiave):
             return c["valore"]
     return None
 
+
+
+
+
+
 def smart_extract_value(keyword, synonyms, text):
     candidates = []
     lines = text.split("\n")
@@ -100,14 +105,24 @@ def smart_extract_value(keyword, synonyms, text):
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
 
+
+
+
+
+
+
+
 def extract_all_values_smart(text):
     keywords_map = {
+        # Conto economico
         "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues", "Total revenues", "Revenues"],
         "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
         "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net income", "Net profit"],
         "EBITDA": ["EBITDA", "Margine operativo lordo"],
         "EBIT": ["EBIT", "Risultato operativo", "Operating income", "Operating profit", "Adjusted operating income", "AOI"],
         "Cash Flow Operativo": ["Cash Flow Operativo", "Operating cash flow", "Flusso di cassa operativo", "Net cash from operating activities"],
+
+        # Stato patrimoniale
         "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
         "Attivo Corrente": ["Attivo corrente", "Current assets"],
         "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "Total equity", "Equity"],
@@ -126,6 +141,7 @@ def extract_all_values_smart(text):
             risultati[key] = estratto["valore"]
 
     return risultati
+
 
 def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
@@ -187,6 +203,7 @@ def extract_financial_data(file_path, return_debug=False):
 
     return (data, debug_info) if return_debug else data
 
+
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
     costi = data.get("Costi", 0)
@@ -204,27 +221,39 @@ def calculate_kpis(data):
     proventi_fin = data.get("Proventi Finanziari", 0)
 
     kpis = {
+        # Redditività
         "Margine Operativo (%)": round((ricavi - costi) / ricavi * 100, 2) if ricavi else 0,
         "EBITDA Margin (%)": round(ebitda / ricavi * 100, 2) if ricavi else 0,
         "EBIT Margin (%)": round(ebit / ricavi * 100, 2) if ricavi else 0,
         "Return on Equity (ROE)": round(utile / pn * 100, 2) if pn else 0,
         "Return on Assets (ROA)": round(utile / attivo * 100, 2) if attivo else 0,
+
+        # Liquidità e solvibilità
         "Current Ratio": round(attivo_corrente / debiti_brevi, 2) if debiti_brevi else 0,
         "Cash Ratio": round(cash_equivalents / debiti_brevi, 2) if debiti_brevi else 0,
+
+        # Leva finanziaria
         "Debt to Equity": round((debiti_brevi + debiti_lunghi) / pn, 2) if pn else 0,
         "Debt to Assets": round((debiti_brevi + debiti_lunghi) / attivo, 2) if attivo else 0,
+
+        # Efficienza
         "Indice di Efficienza (%)": round(utile / costi * 100, 2) if costi else 0,
         "Ricavi / Totale Attivo": round(ricavi / attivo, 2) if attivo else 0,
         "Copertura Interessi": round(ebit / oneri_fin, 2) if oneri_fin else 0,
+
+        # Cash Flow
         "Cash Flow su Utile Netto": round(cash_flow / utile, 2) if utile else 0,
         "Cash Flow su Ricavi": round(cash_flow / ricavi, 2) if ricavi else 0,
         "Cash Flow Margin (%)": round(cash_flow / ricavi * 100, 2) if ricavi else 0,
+
+        # Indicatori personalizzati
         "Capacità di autofinanziamento": round((utile + cash_flow) / ricavi * 100, 2) if ricavi else 0,
         "Indice di solidità patrimoniale": round(pn / attivo, 2) if attivo else 0,
         "Margine di struttura": round(pn - debiti_lunghi, 2)
     }
 
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
+
 
 def plot_kpis(df_kpis):
     fig = px.bar(
