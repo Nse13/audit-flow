@@ -19,7 +19,7 @@ st.title("📊 Analisi Bilanci Avanzata")
 uploaded_file = st.file_uploader("Carica bilancio PDF, Excel, TXT o CSV", type=["pdf", "xlsx", "xls", "txt", "csv"])
 use_debug = st.checkbox("📌 Mostra debug")
 use_llm = st.checkbox("🤖 Usa AuditLLM (se attivo)")
-
+debug = {}
 if uploaded_file:
     file_ext = os.path.splitext(uploaded_file.name)[1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
