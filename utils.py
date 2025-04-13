@@ -47,7 +47,7 @@ def check_valori_confermati(text, chiave):
 
 
 
-def smart_extract_value(keyword, synonyms, text):
+def smart_extract_value(keyword, synonyms, text, return_debug=False):
     candidates = []
     lines = text.split("\n")
     all_terms = [keyword.lower()] + [s.lower() for s in synonyms]
@@ -103,11 +103,9 @@ def smart_extract_value(keyword, synonyms, text):
             })
 
     best = sorted(candidates, key=lambda x: x["score"], reverse=True)
+    if return_debug:
+        return best
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
-best = sorted(candidates, key=lambda x: x["score"], reverse=True)
-if return_debug:
-    return best  # tutte le righe candidate
-return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
 
 
 
