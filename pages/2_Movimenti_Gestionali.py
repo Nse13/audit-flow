@@ -26,14 +26,15 @@ if os.path.exists(DATA_FILE):
 st.subheader("➕ Aggiungi un nuovo movimento")
 
 with st.form("aggiungi_movimento"):
-    codice = st.text_input("Codice movimento", "OIC_01")
-    descrizione = st.text_input("Descrizione", "Fattura attiva")
+    codice = st.selectbox("Codice movimento", ["OIC_01", "OIC_02", "OIC_03", "IAS_01", "IFRS_15"])
+    descrizione = st.selectbox("Descrizione", ["Fattura attiva", "Fattura passiva", "Pagamento cliente", "Pagamento fornitore", "Incasso", "Bonifico", "Versamento", "Prelievo"])
     categoria = st.selectbox("Categoria", ["Vendite", "Acquisti", "Finanziamenti", "Cassa", "Banca"])
     data = st.date_input("Data", value=datetime.date.today())
     importo = st.number_input("Importo", step=100.0)
-    valuta = st.selectbox("Valuta", ["EUR", "USD"])
+    valuta = st.selectbox("Valuta", ["EUR", "USD", "GBP", "CHF"])
     standard = st.selectbox("Standard", ["OIC", "IAS", "IFRS"])
     submitted = st.form_submit_button("Aggiungi movimento")
+
 
     if submitted:
         movimento = MovimentoContabile(
