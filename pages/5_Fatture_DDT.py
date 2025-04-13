@@ -45,3 +45,9 @@ if registro.documenti:
     st.dataframe(registro.to_list(), use_container_width=True)
 else:
     st.info("Nessun documento registrato.")
+st.markdown("### 📄 Elenco Fatture e DDT registrati")
+
+if registro_fatture.fatture:
+    st.dataframe([f.to_dict() for f in registro_fatture.fatture], use_container_width=True)
+else:
+    st.info("Nessuna fattura o documento registrato.")
