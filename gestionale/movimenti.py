@@ -16,18 +16,18 @@ def totali_per_categoria(self):
 def verifica_movimenti_sospetti(self, soglia=1_000_000):
     return [m for m in self.movimenti if abs(m.importo) >= soglia]
 
-def verifica_incoerenze_con_registro(self, registro_esterno: List[dict]):
-    """Confronta i movimenti con quelli di un registro esterno (es. banche/clienti)."""
+def verifica_incoerenze_con_registro(self, registro_esterno: list[dict]):
+    """Confronta i movimenti con quelli presenti in un registro esterno (es. fornitori, clienti, banche)."""
     differenze = []
-    esterni_dict = {json.dumps(r, sort_keys=True): r for r in registro_esterno}
-    for m in self.movimenti:
-        chiave = json.dumps(m.to_dict(), sort_keys=True)
-        if chiave not in esterni_dict:
-            differenze.append(m)
+    registro_esterno_serializzato = {json.dumps(m, sort_keys=True) for m in registro_esterno}
+    for movimento in self.movimenti:
+        if json.dumps(movimento.to_dict(), sort_keys=True) not in registro_esterno_serializzato:
+            differenze.append(movimento)
     return differenze
 
 def esporta_csv(self, filename="movimenti_export.csv"):
-    import csv
+    if not self.movimenti:
+        return
     with open(filename, mode="w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=self.movimenti[0].to_dict().keys())
         writer.writeheader()
