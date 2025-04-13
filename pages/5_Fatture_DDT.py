@@ -43,20 +43,25 @@ with st.form("form_doc"):
 
 st.markdown("### 🔍 Ricerca Fattura o DDT")
 
-criterio = st.selectbox("Cerca per", ["Numero", "Cliente/Fornitore"])
-chiave = st.text_input("Inserisci il valore da cercare")
+criteri = {
+    "Numero": "numero",
+    "Tipo": "tipo",
+    "Data": "data",
+    "Cliente": "cliente",
+    "Importo": "importo",
+    "Descrizione": "descrizione"
+}
 
-if chiave:
-    risultati = []
-    for d in registro.documenti:
-        dati = d.to_dict()
-        if criterio == "Numero" and chiave.lower() in str(dati.get("Numero", "")).lower():
-            risultati.append(dati)
-        elif criterio == "Cliente/Fornitore" and chiave.lower() in dati.get("Cliente/Fornitore", "").lower():
-            risultati.append(dati)
+criterio = st.selectbox("Cerca per", list(criteri.keys()))
+valore = st.text_input("Inserisci il valore da cercare")
 
+if valore:
+    risultati = [
+        d for d in registro.to_list()
+        if valore.lower() in str(d[criteri[criterio]]).lower()
+    ]
     if risultati:
-        st.success(f"Trovati {len(risultati)} documenti:")
+        st.success(f"Trovati {len(risultati)} risultati:")
         st.dataframe(risultati, use_container_width=True)
     else:
         st.warning("Nessuna corrispondenza trovata.")
