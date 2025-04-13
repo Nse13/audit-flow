@@ -19,7 +19,11 @@ st.title("📊 Analisi Bilanci Avanzata")
 uploaded_file = st.file_uploader("Carica bilancio PDF, Excel, TXT o CSV", type=["pdf", "xlsx", "xls", "txt", "csv"])
 use_debug = st.checkbox("📌 Mostra debug")
 use_llm = st.checkbox("🤖 Usa AuditLLM (se attivo)")
+
 debug = {}
+data = {}
+updated_data = {}
+
 if uploaded_file:
     file_ext = os.path.splitext(uploaded_file.name)[1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
@@ -28,27 +32,21 @@ if uploaded_file:
 
     data, debug = extract_financial_data(file_path, return_debug=True)
 
-st.subheader("📄 Dati suggeriti e righe candidate")
-
-updated_data = {}
-for key, righe in debug.items():
-    if isinstance(righe, list) and all(isinstance(r, dict) and "valore" in r and "riga" in r for r in righe):
-        st.markdown(f"#### 🔹 {key}")
-        opzioni = [f"{r['valore']:,.2f} — {r['riga']}" for r in righe]
-        scelta = st.radio(f"Seleziona il valore corretto per {key}:", opzioni, key=key)
-        if scelta:
-            valore_scelto = float(scelta.split("—")[0].replace(".", "").replace(",", "."))
-            testo = scelta.split("—")[1].strip()
-            salva_valore_confermato(key, testo, valore_scelto)
-            updated_data[key] = valore_scelto
-    else:
-        # fallback se non ci sono righe candidate
-        updated_data[key] = debug.get(key, 0)
+    st.subheader("📄 Dati suggeriti e righe candidate")
+    for key, righe in debug.get("righe_candidate", {}).items():
+        if isinstance(righe, list) and all(isinstance(r, dict) and "valore" in r and "riga" in r for r in righe):
+            st.markdown(f"#### 🔹 {key}")
+            opzioni = [f"{r['valore']:,.2f} — {r['riga']}" for r in righe]
+            scelta = st.radio(f"Seleziona il valore corretto per {key}:", opzioni, key=key)
+            if scelta:
+                valore_scelto = float(scelta.split("—")[0].replace(".", "").replace(",", "."))
+                testo = scelta.split("—")[1].strip()
+                salva_valore_confermato(key, testo, valore_scelto)
+                updated_data[key] = valore_scelto
 
     st.subheader("✏️ Correggi manualmente i valori:")
-    updated_data = {}
     for k, v in data.items():
-        new_val = st.text_input(f"{k}:", value=str(v))
+        new_val = st.text_input(f"{k}:", value=str(updated_data.get(k, v)))
         try:
             updated_data[k] = float(new_val)
             if new_val != str(v):
@@ -94,10 +92,12 @@ for key, righe in debug.items():
             dati_annuali[nome] = dati
 
         if dati_annuali:
-            df_confronto = calculate_kpis(dati_annuali[list(dati_annuali.keys())[0]])  # Placeholder
             st.subheader("📊 Confronto KPI tra anni / aziende")
-            st.dataframe(df_confronto)
+            for nome, dati in dati_annuali.items():
+                st.markdown(f"#### 📁 {nome}")
+                df = calculate_kpis(dati)
+                st.dataframe(df)
 
     if use_debug:
         st.subheader("🔍 Debug - Testo grezzo estratto")
-        st.json(debug)
+        st.json(debug.get("estratto", "Nessun testo disponibile"))
