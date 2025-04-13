@@ -114,7 +114,7 @@ def smart_extract_value(keyword, synonyms, text, return_debug=False):
 
 
 
-def extract_all_values_smart(text):
+def extract_all_values_smart(text, return_debug=False):
     keywords_map = {
         # Conto economico
         "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues", "Total revenues", "Revenues"],
@@ -134,15 +134,22 @@ def extract_all_values_smart(text):
     }
 
     risultati = {}
+    debug_righe = {}
+
     for key, synonyms in keywords_map.items():
         confermato = check_valori_confermati(text, key)
         if confermato is not None:
             risultati[key] = confermato
         else:
-            estratto = smart_extract_value(key, synonyms, text)
-            risultati[key] = estratto["valore"]
+            estratto = smart_extract_value(key, synonyms, text, return_debug=return_debug)
+            if return_debug:
+                debug_righe[key] = estratto  # lista di righe candidate
+                risultati[key] = estratto[0]["valore"] if estratto else 0.0
+            else:
+                risultati[key] = estratto["valore"]
 
-    return risultati
+    return (risultati, debug_righe) if return_debug else risultati
+
 
 
 def extract_financial_data(file_path, return_debug=False):
