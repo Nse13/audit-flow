@@ -83,4 +83,8 @@ if file_esterno:
         differenze = registro.verifica_incoerenze_con_registro(registro_esterno)
         if differenze:
             st.error("❌ Movimenti non trovati nel registro esterno:")
-            st.dataframe([m
+            st.dataframe([m.to_dict() for m in differenze])
+        else:
+            st.success("✅ Tutti i movimenti sono coerenti con il registro esterno.")
+    except Exception as e:
+        st.error(f"Errore nella lettura del file JSON: {e}")
