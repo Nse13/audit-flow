@@ -1,24 +1,23 @@
-import csv
+from dataclasses import dataclass, asdict
 import json
-from dataclasses import asdict
-from datetime import datetime
+import csv
 
+@dataclass
 class MovimentoContabile:
-    def __init__(self, codice, descrizione, categoria, data, importo, valuta, standard):
-        self.codice = codice
-        self.descrizione = descrizione
-        self.categoria = categoria
-        self.data = data  # stringa "YYYY-MM-DD"
-        self.importo = importo
-        self.valuta = valuta
-        self.standard = standard
+    codice: str
+    descrizione: str
+    categoria: str
+    data: str  # formato "YYYY-MM-DD"
+    importo: float
+    valuta: str
+    standard: str
 
     def to_dict(self):
         return asdict(self)
 
 class RegistroMovimenti:
     def __init__(self):
-        self.movimenti = []
+        self.movimenti: list[MovimentoContabile] = []
 
     def aggiungi_movimento(self, movimento: MovimentoContabile):
         if isinstance(movimento, MovimentoContabile):
@@ -38,9 +37,9 @@ class RegistroMovimenti:
 
     def verifica_incoerenze_con_registro(self, registro_esterno: list[dict]):
         differenze = []
-        registro_esterno_serializzato = {json.dumps(m, sort_keys=True) for m in registro_esterno}
+        registro_serializzato = {json.dumps(m, sort_keys=True) for m in registro_esterno}
         for movimento in self.movimenti:
-            if json.dumps(movimento.to_dict(), sort_keys=True) not in registro_esterno_serializzato:
+            if json.dumps(movimento.to_dict(), sort_keys=True) not in registro_serializzato:
                 differenze.append(movimento)
         return differenze
 
@@ -53,6 +52,6 @@ class RegistroMovimenti:
             for m in self.movimenti:
                 writer.writerow(m.to_dict())
 
-    def carica_da_lista(self, lista_dizionari):
+    def carica_da_lista(self, lista_dizionari: list[dict]):
         for item in lista_dizionari:
             self.movimenti.append(MovimentoContabile(**item))
