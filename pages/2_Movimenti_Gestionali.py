@@ -26,36 +26,75 @@ if os.path.exists(DATA_FILE):
 st.subheader("➕ Aggiungi un nuovo movimento")
 
 with st.form("aggiungi_movimento"):
-    # Mappatura descrizione → categoria
-    mappa_descrizione_categoria = {
+    # Mappa descrizione → categoria
+    DESCRIZIONE_CATEGORIE = {
+        # Vendite
         "Fattura attiva": "Vendite",
+        "Vendita bene strumentale": "Vendite",
+        "Prestazione di servizi": "Vendite",
+        "Anticipo su vendita": "Vendite",
+        "Reso cliente": "Vendite",
+        "Fattura differita": "Vendite",
+
+        # Acquisti
         "Fattura passiva": "Acquisti",
-        "Pagamento cliente": "Cassa",
-        "Pagamento fornitore": "Cassa",
-        "Incasso": "Banca",
-        "Bonifico": "Banca",
-        "Versamento": "Finanziamenti",
-        "Prelievo": "Finanziamenti"
+        "Acquisto materiale di consumo": "Acquisti",
+        "Acquisto bene strumentale": "Acquisti",
+        "Anticipo a fornitore": "Acquisti",
+        "Nota di debito fornitore": "Acquisti",
+        "Spese telefoniche": "Acquisti",
+        "Spese energia elettrica": "Acquisti",
+        "Spese internet": "Acquisti",
+        "Acquisto software": "Acquisti",
+
+        # Finanziamenti
+        "Prestito bancario": "Finanziamenti",
+        "Restituzione finanziamento": "Finanziamenti",
+        "Emissione obbligazioni": "Finanziamenti",
+        "Versamento aumento capitale": "Finanziamenti",
+        "Contributo a fondo perduto": "Finanziamenti",
+
+        # Cassa/Banca
+        "Prelievo da conto corrente": "Cassa",
+        "Versamento contanti": "Cassa",
+        "Bonifico ricevuto": "Banca",
+        "Bonifico effettuato": "Banca",
+        "Commissioni bancarie": "Banca",
+        "Pagamento F24": "Banca",
+        "Pagamento INPS/INAIL": "Banca",
+        "Pagamento imposta di bollo": "Banca",
+
+        # Personale
+        "Pagamento collaboratore": "Personale",
+        "Anticipo stipendio": "Personale",
+        "Trattenute fiscali": "Personale",
+        "TFR erogato": "Personale",
+
+        # Rettifiche
+        "Rettifica contabile": "Rettifiche",
+        "Giroconto interno": "Rettifiche",
+        "Rateo attivo/passivo": "Rettifiche",
+        "Risconto attivo/passivo": "Rettifiche",
+        "Rettifica ammortamento": "Rettifiche",
+        "Accantonamento fondo rischi": "Rettifiche",
+        "Svalutazione crediti": "Rettifiche"
     }
 
+    DESCRIZIONI_ORDINATE = sorted(DESCRIZIONE_CATEGORIE.keys())
     codici_possibili = ["OIC_01", "OIC_02", "IAS_01", "IFRS_15"]
-    descrizioni_possibili = list(mappa_descrizione_categoria.keys())
     valute_possibili = ["EUR", "USD", "GBP", "CHF"]
     standard_possibili = ["OIC", "IAS", "IFRS"]
 
     codice = st.selectbox("Codice movimento", codici_possibili)
-    descrizione = st.selectbox("Descrizione", descrizioni_possibili)
-
-    # Seleziona la categoria predefinita in base alla descrizione
-    categoria_default = mappa_descrizione_categoria.get(descrizione, "Cassa")
-    categoria = st.selectbox("Categoria", ["Vendite", "Acquisti", "Finanziamenti", "Cassa", "Banca"], index=["Vendite", "Acquisti", "Finanziamenti", "Cassa", "Banca"].index(categoria_default))
+    descrizione = st.selectbox("Descrizione", DESCRIZIONI_ORDINATE)
+    categoria_default = DESCRIZIONE_CATEGORIE.get(descrizione, "Altro")
+    categoria = st.selectbox("Categoria", list(set(DESCRIZIONE_CATEGORIE.values())), index=list(set(DESCRIZIONE_CATEGORIE.values())).index(categoria_default))
 
     data = st.date_input("Data", value=datetime.date.today())
     importo = st.number_input("Importo", step=100.0)
     valuta = st.selectbox("Valuta", valute_possibili)
     standard = st.selectbox("Standard", standard_possibili)
     submitted = st.form_submit_button("Aggiungi movimento")
-
 
     if submitted:
         movimento = MovimentoContabile(
