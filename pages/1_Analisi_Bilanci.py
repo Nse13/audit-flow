@@ -28,8 +28,22 @@ if uploaded_file:
 
     data, debug = extract_financial_data(file_path, return_debug=True)
 
-    st.subheader("📄 Dati estratti automaticamente")
-    st.json(data)
+st.subheader("📄 Dati suggeriti e righe candidate")
+
+updated_data = {}
+for key, righe in debug.items():
+    if isinstance(righe, list) and all(isinstance(r, dict) and "valore" in r and "riga" in r for r in righe):
+        st.markdown(f"#### 🔹 {key}")
+        opzioni = [f"{r['valore']:,.2f} — {r['riga']}" for r in righe]
+        scelta = st.radio(f"Seleziona il valore corretto per {key}:", opzioni, key=key)
+        if scelta:
+            valore_scelto = float(scelta.split("—")[0].replace(".", "").replace(",", "."))
+            testo = scelta.split("—")[1].strip()
+            salva_valore_confermato(key, testo, valore_scelto)
+            updated_data[key] = valore_scelto
+    else:
+        # fallback se non ci sono righe candidate
+        updated_data[key] = debug.get(key, 0)
 
     st.subheader("✏️ Correggi manualmente i valori:")
     updated_data = {}
