@@ -56,6 +56,17 @@ for voce in registro.voci:
         voci_filtrate.append(voce)
 
 st.subheader("📋 Voci registrate")
+# 📤 Esportazione Excel
+import io
+import pandas as pd
+
+if voci_visualizzate:
+    st.markdown("### ⬇️ Esporta in Excel")
+    buffer = io.BytesIO()
+    df = pd.DataFrame([vars(v) for v in voci_visualizzate])
+    df.to_excel(buffer, index=False)
+    buffer.seek(0)
+    st.download_button("📥 Scarica Anagrafica Excel", buffer, file_name="anagrafica.xlsx")
 
 if registro.voci:
     voci_visualizzate = [v for v in registro.voci if
