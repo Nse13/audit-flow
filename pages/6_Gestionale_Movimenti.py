@@ -1,71 +1,73 @@
-# --- 6_Movimenti_Estesi.py ---
 import streamlit as st
 import os
 import json
 import pandas as pd
 from datetime import datetime
-from io import BytesIO
 
-DATA_PATH = "gestionale/movimenti_estesi.json"
+MOVIMENTI_FILE = "gestionale/movimenti_estesi.json"
+CLIENTI_FORNITORI_FILE = "gestionale/clienti_fornitori.json"
+FATTURE_FILE = "gestionale/fatture_ddt.json"
 
-# Inizializza dati se non esiste
-if not os.path.exists(DATA_PATH):
-    with open(DATA_PATH, "w") as f:
-        json.dump([], f)
+st.title("📘 Registro Movimenti Contabili Estesi")
 
-# Carica dati
-with open(DATA_PATH, "r") as f:
-    movimenti = json.load(f)
+# Caricamento dati esistenti
+if os.path.exists(MOVIMENTI_FILE):
+    with open(MOVIMENTI_FILE, "r") as f:
+        movimenti = json.load(f)
+else:
+    movimenti = []
 
-st.title("📌 Registro Movimenti Estesi")
+# Carica clienti/fornitori
+if os.path.exists(CLIENTI_FORNITORI_FILE):
+    with open(CLIENTI_FORNITORI_FILE) as f:
+        anagrafica = json.load(f)
+    clienti_fornitori = [cf["nome"] for cf in anagrafica]
+else:
+    clienti_fornitori = []
 
-# === Inserimento nuovo movimento ===
-st.subheader("➕ Aggiungi Movimento")
+# Carica fatture/DDT
+if os.path.exists(FATTURE_FILE):
+    with open(FATTURE_FILE) as f:
+        fatture_ddt = json.load(f)
+    opzioni_fatture = [f"{f['tipo']} {f['numero']} del {f['data']}" for f in fatture_ddt]
+else:
+    opzioni_fatture = []
 
-with st.form("aggiungi_movimento"):
+st.subheader("➕ Aggiungi nuovo movimento")
+
+col1, col2 = st.columns(2)
+with col1:
     data = st.date_input("Data", value=datetime.today())
-    descrizione = st.text_input("Descrizione")
-    tipo = st.selectbox("Tipo", ["Entrata", "Uscita"])
-    importo = st.number_input("Importo", step=0.01)
-    contropartita = st.text_input("Cliente/Fornitore")
-    fattura_ddt = st.text_input("Numero Fattura/DDT")
-    categoria = st.selectbox("Categoria", ["Vendita", "Acquisto", "Pagamento", "Incasso", "Altro"])
-    conferma = st.form_submit_button("Salva")
+    tipo = st.selectbox("Tipo Movimento", ["Entrata", "Uscita"])
+    importo = st.number_input("Importo (€)", step=0.01, format="%.2f")
+    categoria = st.text_input("Categoria (es. Fattura, Acquisto, Stipendio...)")
 
-    if conferma:
-        nuovo = {
-            "data": str(data),
-            "descrizione": descrizione,
-            "tipo": tipo,
-            "importo": importo,
-            "contropartita": contropartita,
-            "fattura_ddt": fattura_ddt,
-            "categoria": categoria
-        }
-        movimenti.append(nuovo)
-        with open(DATA_PATH, "w") as f:
-            json.dump(movimenti, f, indent=2)
-        st.success("Movimento salvato con successo.")
-        st.experimental_rerun()
+with col2:
+    cliente_fornitore = st.selectbox("Cliente/Fornitore (opzionale)", [""] + clienti_fornitori)
+    fattura_collegata = st.selectbox("Collega Fattura/DDT (opzionale)", [""] + opzioni_fatture)
+    descrizione = st.text_area("Descrizione", height=100)
 
-# === Visualizzazione movimenti ===
-st.subheader("📋 Elenco Movimenti")
+if st.button("💾 Salva movimento"):
+    nuovo = {
+        "data": str(data),
+        "tipo": tipo,
+        "importo": importo,
+        "categoria": categoria,
+        "cliente_fornitore": cliente_fornitore,
+        "fattura_collegata": fattura_collegata,
+        "descrizione": descrizione
+    }
+    movimenti.append(nuovo)
+    with open(MOVIMENTI_FILE, "w") as f:
+        json.dump(movimenti, f, indent=2)
+    st.success("✅ Movimento salvato!")
 
+# Visualizza
+st.subheader("📋 Storico movimenti")
 df = pd.DataFrame(movimenti)
 if not df.empty:
-    df["data"] = pd.to_datetime(df["data"])
-    df = df.sort_values("data", ascending=False)
     st.dataframe(df)
-
-    if st.button("📤 Esporta in Excel"):
-        output = BytesIO()
-        df.to_excel(output, index=False, engine="openpyxl")
-        output.seek(0)
-        st.download_button(
-            label="⬇️ Scarica Excel",
-            data=output,
-            file_name="movimenti_estesi.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+    st.download_button("⬇️ Esporta in Excel", df.to_csv(index=False).encode(), file_name="movimenti_estesi.csv", mime="text/csv")
 else:
     st.info("Nessun movimento registrato.")
+
