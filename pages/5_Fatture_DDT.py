@@ -3,6 +3,8 @@ import streamlit as st
 import datetime
 import os
 import sys
+import pandas as pd
+import io
 
 # Collegamento al modulo gestionale
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -41,8 +43,7 @@ with st.form("form_doc"):
         registro.salva_su_file(DOCUMENTI_FILE)
         st.success("✅ Documento salvato correttamente!")
 
-st.markdown("### 🔍 Ricerca Fattura o DDT")
-
+st.subheader("🔍 Ricerca e Filtri")
 criteri = {
     "Numero": "numero",
     "Tipo": "tipo",
@@ -51,24 +52,38 @@ criteri = {
     "Importo": "importo",
     "Descrizione": "descrizione"
 }
-
 criterio = st.selectbox("Cerca per", list(criteri.keys()))
 valore = st.text_input("Inserisci il valore da cercare")
+tipo_filtro = st.selectbox("Filtra per tipo", ["Tutti", "Fattura", "DDT"])
 
-if valore:
-    risultati = [
-        d for d in registro.to_list()
-        if valore.lower() in str(d[criteri[criterio]]).lower()
-    ]
-    if risultati:
-        st.success(f"Trovati {len(risultati)} risultati:")
-        st.dataframe(risultati, use_container_width=True)
-    else:
-        st.warning("Nessuna corrispondenza trovata.")
+# Filtraggio documenti
+documenti_filtrati = []
+for doc in registro.documenti:
+    match_tipo = (tipo_filtro == "Tutti") or (doc.tipo == tipo_filtro)
+    match_query = valore.lower() in str(getattr(doc, criteri[criterio])).lower() if valore else True
+    if match_tipo and match_query:
+        documenti_filtrati.append(doc)
 
-st.markdown("### 📑 Elenco documenti registrati")
+# Esportazione Excel
+if documenti_filtrati:
+    st.markdown("### ⬇️ Esporta in Excel")
+    buffer = io.BytesIO()
+    df = pd.DataFrame([vars(d) for d in documenti_filtrati])
+    df.to_excel(buffer, index=False)
+    buffer.seek(0)
+    st.download_button("📥 Scarica Documenti Excel", buffer, file_name="documenti.xlsx")
 
-if registro.documenti:
-    st.dataframe(registro.to_list(), use_container_width=True)
+st.markdown("### 📋 Elenco documenti registrati")
+if documenti_filtrati:
+    for doc in documenti_filtrati:
+        with st.expander(f"{doc.tipo} – {doc.numero} – {doc.cliente}"):
+            st.write(f"📅 Data: {doc.data}")
+            st.write(f"💰 Importo: € {doc.importo:,.2f}")
+            st.write(f"📄 Descrizione: {doc.descrizione}")
+            if st.button("🗑️ Elimina", key=f"del_{doc.numero}"):
+                registro.documenti.remove(doc)
+                registro.salva_su_file(DOCUMENTI_FILE)
+                st.success("✅ Documento eliminato!")
+                st.experimental_rerun()
 else:
-    st.info("Nessun documento registrato.")
+    st.info("Nessun documento trovato.")
