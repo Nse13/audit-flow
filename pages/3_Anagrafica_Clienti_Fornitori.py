@@ -40,9 +40,24 @@ with st.form("aggiungi_voce"):
         registro.salva_su_file(DATA_FILE)
         st.success("✅ Voce aggiunta correttamente!")
 
+st.subheader("🔍 Ricerca e Filtro")
+
+search_query = st.text_input("Cerca (nome, codice, P.IVA, email, ecc.)")
+tipo_filtro = st.selectbox("Filtra per tipo", ["Tutti", "Cliente", "Fornitore"])
+
+voci_filtrate = []
+for voce in registro.voci:
+    match_tipo = (tipo_filtro == "Tutti") or (voce.tipo == tipo_filtro)
+    match_query = (search_query.lower() in voce.codice.lower() or
+                   search_query.lower() in voce.ragione_sociale.lower() or
+                   search_query.lower() in voce.partita_iva.lower() or
+                   search_query.lower() in voce.email.lower())
+    if match_tipo and match_query:
+        voci_filtrate.append(voce)
+
 st.subheader("📋 Voci registrate")
 
-if registro.voci:
-    st.dataframe(registro.to_list(), use_container_width=True)
+if voci_filtrate:
+    st.dataframe([vars(v) for v in voci_filtrate], use_container_width=True)
 else:
-    st.info("Nessuna voce registrata ancora.")
+    st.info("Nessuna voce trovata.")
