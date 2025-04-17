@@ -70,14 +70,36 @@ if registro.voci:
         voci_da_eliminare = []
 
         for i, voce in enumerate(voci_visualizzate):
-            col1, col2 = st.columns([0.05, 0.95])
-            with col1:
-                seleziona = st.checkbox("", key=f"del_{voce.codice}")
-            with col2:
-                st.markdown(f"**{voce.codice}** – {voce.ragione_sociale} – {voce.tipo} – {voce.partita_iva} – {voce.email}")
+    with st.expander(f"📄 {voce.codice} – {voce.ragione_sociale}"):
+        col1, col2 = st.columns([0.1, 0.9])
+        with col1:
+            elimina = st.checkbox("🗑️", key=f"del_{voce.codice}")
+        with col2:
+            with st.form(f"mod_{voce.codice}"):
+                nuovo_codice = st.text_input("Codice", value=voce.codice)
+                nuova_ragione = st.text_input("Ragione Sociale", value=voce.ragione_sociale)
+                nuovo_tipo = st.selectbox("Tipo", ["Cliente", "Fornitore"], index=0 if voce.tipo == "Cliente" else 1)
+                nuovo_indirizzo = st.text_input("Indirizzo", value=voce.indirizzo)
+                nuova_piva = st.text_input("Partita IVA", value=voce.partita_iva)
+                nuova_email = st.text_input("Email", value=voce.email)
+                conferma = st.form_submit_button("💾 Salva modifiche")
 
-            if seleziona:
-                voci_da_eliminare.append(voce)
+                if conferma:
+                    voce.codice = nuovo_codice
+                    voce.ragione_sociale = nuova_ragione
+                    voce.tipo = nuovo_tipo
+                    voce.indirizzo = nuovo_indirizzo
+                    voce.partita_iva = nuova_piva
+                    voce.email = nuova_email
+                    registro.salva_su_file(DATA_FILE)
+                    st.success("✅ Modifiche salvate!")
+
+    if elimina:
+        registro.voci.remove(voce)
+        registro.salva_su_file(DATA_FILE)
+        st.success("✅ Voce eliminata.")
+        st.experimental_rerun()
+
 
         if voci_da_eliminare:
             if st.button("🗑️ Elimina voci selezionate"):
