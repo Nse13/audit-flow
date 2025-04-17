@@ -1,58 +1,71 @@
-# --- 6_Gestionale_Movimenti.py ---
+# --- 6_Movimenti_Estesi.py ---
 import streamlit as st
-import json
 import os
-from datetime import datetime
+import json
 import pandas as pd
+from datetime import datetime
+from io import BytesIO
 
-st.set_page_config(page_title="Movimenti Contabili", page_icon="💼")
-st.title("💼 Gestione Movimenti Contabili")
+DATA_PATH = "gestionale/movimenti_estesi.json"
 
-DB_FILE = "movimenti_contabili.json"
+# Inizializza dati se non esiste
+if not os.path.exists(DATA_PATH):
+    with open(DATA_PATH, "w") as f:
+        json.dump([], f)
 
-def carica_dati():
-    if not os.path.exists(DB_FILE):
-        return []
-    with open(DB_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+# Carica dati
+with open(DATA_PATH, "r") as f:
+    movimenti = json.load(f)
 
-def salva_dati(movimenti):
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(movimenti, f, indent=2, ensure_ascii=False)
+st.title("📌 Registro Movimenti Estesi")
 
-# Carica dati esistenti
-movimenti = carica_dati()
+# === Inserimento nuovo movimento ===
+st.subheader("➕ Aggiungi Movimento")
 
-# Form per aggiungere un nuovo movimento
-with st.form("nuovo_movimento"):
-    st.subheader("➕ Aggiungi Movimento")
-    data = st.date_input("📅 Data", value=datetime.today())
-    descrizione = st.text_input("📝 Descrizione")
-    conto_dare = st.text_input("🔻 Conto Dare")
-    conto_avere = st.text_input("🔺 Conto Avere")
-    importo = st.number_input("💰 Importo", min_value=0.01, step=0.01)
+with st.form("aggiungi_movimento"):
+    data = st.date_input("Data", value=datetime.today())
+    descrizione = st.text_input("Descrizione")
+    tipo = st.selectbox("Tipo", ["Entrata", "Uscita"])
+    importo = st.number_input("Importo", step=0.01)
+    contropartita = st.text_input("Cliente/Fornitore")
+    fattura_ddt = st.text_input("Numero Fattura/DDT")
+    categoria = st.selectbox("Categoria", ["Vendita", "Acquisto", "Pagamento", "Incasso", "Altro"])
+    conferma = st.form_submit_button("Salva")
 
-    submitted = st.form_submit_button("Salva")
-    if submitted:
-        if not (descrizione and conto_dare and conto_avere):
-            st.error("Compila tutti i campi obbligatori.")
-        else:
-            nuovo = {
-                "data": str(data),
-                "descrizione": descrizione,
-                "conto_dare": conto_dare,
-                "conto_avere": conto_avere,
-                "importo": round(importo, 2)
-            }
-            movimenti.append(nuovo)
-            salva_dati(movimenti)
-            st.success("✅ Movimento salvato con successo!")
-            st.experimental_rerun()
+    if conferma:
+        nuovo = {
+            "data": str(data),
+            "descrizione": descrizione,
+            "tipo": tipo,
+            "importo": importo,
+            "contropartita": contropartita,
+            "fattura_ddt": fattura_ddt,
+            "categoria": categoria
+        }
+        movimenti.append(nuovo)
+        with open(DATA_PATH, "w") as f:
+            json.dump(movimenti, f, indent=2)
+        st.success("Movimento salvato con successo.")
+        st.experimental_rerun()
 
-# Visualizza movimenti esistenti
-if movimenti:
-    st.subheader("📋 Elenco Movimenti Registrati")
-    df = pd.DataFrame(movimenti)
+# === Visualizzazione movimenti ===
+st.subheader("📋 Elenco Movimenti")
+
+df = pd.DataFrame(movimenti)
+if not df.empty:
+    df["data"] = pd.to_datetime(df["data"])
+    df = df.sort_values("data", ascending=False)
     st.dataframe(df)
+
+    if st.button("📤 Esporta in Excel"):
+        output = BytesIO()
+        df.to_excel(output, index=False, engine="openpyxl")
+        output.seek(0)
+        st.download_button(
+            label="⬇️ Scarica Excel",
+            data=output,
+            file_name="movimenti_estesi.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 else:
-    st.info("Nessun movimento presente al momento.")
+    st.info("Nessun movimento registrato.")
