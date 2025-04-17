@@ -57,7 +57,36 @@ for voce in registro.voci:
 
 st.subheader("📋 Voci registrate")
 
-if voci_filtrate:
-    st.dataframe([vars(v) for v in voci_filtrate], use_container_width=True)
+if registro.voci:
+    voci_visualizzate = [v for v in registro.voci if
+                         ((tipo_filtro == "Tutti") or (v.tipo == tipo_filtro)) and
+                         (search_query.lower() in v.codice.lower() or
+                          search_query.lower() in v.ragione_sociale.lower() or
+                          search_query.lower() in v.partita_iva.lower() or
+                          search_query.lower() in v.email.lower())]
+
+    if voci_visualizzate:
+        st.write("Seleziona le voci da eliminare:")
+        voci_da_eliminare = []
+
+        for i, voce in enumerate(voci_visualizzate):
+            col1, col2 = st.columns([0.05, 0.95])
+            with col1:
+                seleziona = st.checkbox("", key=f"del_{voce.codice}")
+            with col2:
+                st.markdown(f"**{voce.codice}** – {voce.ragione_sociale} – {voce.tipo} – {voce.partita_iva} – {voce.email}")
+
+            if seleziona:
+                voci_da_eliminare.append(voce)
+
+        if voci_da_eliminare:
+            if st.button("🗑️ Elimina voci selezionate"):
+                for voce in voci_da_eliminare:
+                    registro.voci.remove(voce)
+                registro.salva_su_file(DATA_FILE)
+                st.success(f"{len(voci_da_eliminare)} voce/i eliminata/e correttamente!")
+                st.experimental_rerun()
+    else:
+        st.info("Nessuna voce trovata per la ricerca e filtro selezionati.")
 else:
-    st.info("Nessuna voce trovata.")
+    st.info("Nessuna voce registrata ancora.")
