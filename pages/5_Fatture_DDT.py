@@ -3,27 +3,23 @@ import streamlit as st
 import datetime
 import os
 import sys
-import json
-import base64
-import tempfile
+import io
+import pandas as pd
 
 # Collegamento al modulo gestionale
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from gestionale.fatture import Documento, RegistroDocumenti
-from gestionale.movimenti import RegistroMovimenti, Movimento
 
 st.title("📄 Fatture e Documenti di Trasporto")
 
 DOCUMENTI_FILE = "documenti.json"
-MOVIMENTI_FILE = "movimenti.json"
 registro = RegistroDocumenti()
-registro_movimenti = RegistroMovimenti()
 
+# Caricamento documenti esistenti
 if os.path.exists(DOCUMENTI_FILE):
     registro.carica_da_file(DOCUMENTI_FILE)
-if os.path.exists(MOVIMENTI_FILE):
-    registro_movimenti.carica_da_file(MOVIMENTI_FILE)
 
+# Aggiunta documento
 st.subheader("➕ Aggiungi documento")
 
 with st.form("form_doc"):
@@ -33,45 +29,35 @@ with st.form("form_doc"):
     cliente = st.text_input("Cliente / Destinatario")
     importo = st.number_input("Importo", step=100.0)
     descrizione = st.text_area("Descrizione")
-    allegato = st.file_uploader("📎 Allega file (PDF o immagine)", type=["pdf", "png", "jpg", "jpeg"])
-    crea_movimento = st.checkbox("Registra movimento contabile associato")
     submit = st.form_submit_button("Aggiungi documento")
 
     if submit:
-        allegato_path = ""
-        if allegato:
-            estensione = os.path.splitext(allegato.name)[1]
-            allegato_path = f"allegati/{tipo}_{numero}{estensione}"
-            os.makedirs("allegati", exist_ok=True)
-            with open(allegato_path, "wb") as f:
-                f.write(allegato.read())
-
         doc = Documento(
             numero=numero,
             tipo=tipo,
             data=data.strftime("%Y-%m-%d"),
             cliente=cliente,
             importo=importo,
-            descrizione=descrizione,
-            allegato=allegato_path
+            descrizione=descrizione
         )
         registro.aggiungi_documento(doc)
         registro.salva_su_file(DOCUMENTI_FILE)
-
-        if crea_movimento:
-            movimento = Movimento(
-                data=data.strftime("%Y-%m-%d"),
-                descrizione=f"{tipo} {numero} - {cliente}",
-                importo=importo,
-                tipo="Entrata" if tipo == "Fattura" else "Uscita",
-                documento_riferimento=numero
-            )
-            registro_movimenti.aggiungi_movimento(movimento)
-            registro_movimenti.salva_su_file(MOVIMENTI_FILE)
-
         st.success("✅ Documento salvato correttamente!")
 
-st.markdown("### 🔍 Ricerca Fattura o DDT")
+# 📅 Filtro per periodo
+st.subheader("📆 Filtro per Periodo")
+
+data_inizio = st.date_input("Data inizio", value=datetime.date.today().replace(day=1))
+data_fine = st.date_input("Data fine", value=datetime.date.today())
+
+docs_filtrati = [
+    d for d in registro.documenti
+    if data_inizio <= datetime.datetime.strptime(d.data, "%Y-%m-%d").date() <= data_fine
+]
+
+# 🔍 Ricerca
+st.subheader("🔍 Ricerca Fattura o DDT")
+
 criteri = {
     "Numero": "numero",
     "Tipo": "tipo",
@@ -80,30 +66,37 @@ criteri = {
     "Importo": "importo",
     "Descrizione": "descrizione"
 }
+
 criterio = st.selectbox("Cerca per", list(criteri.keys()))
 valore = st.text_input("Inserisci il valore da cercare")
 
 if valore:
-    risultati = [d for d in registro.to_list() if valore.lower() in str(d[criteri[criterio]]).lower()]
-    if risultati:
-        st.success(f"Trovati {len(risultati)} risultati:")
-        st.dataframe(risultati, use_container_width=True)
-    else:
-        st.warning("Nessuna corrispondenza trovata.")
+    docs_filtrati = [
+        d for d in docs_filtrati
+        if valore.lower() in str(getattr(d, criteri[criterio])).lower()
+    ]
 
-st.markdown("### 📑 Elenco documenti registrati")
+# 📊 Dashboard riepilogativa
+st.subheader("📊 Riepilogo Statistico")
 
-if registro.documenti:
-    for doc in registro.documenti:
-        with st.expander(f"📄 {doc.tipo} {doc.numero} – {doc.cliente}"):
-            st.write(f"📅 Data: {doc.data}")
-            st.write(f"💰 Importo: € {doc.importo:,.2f}")
-            st.write(f"📝 Descrizione: {doc.descrizione}")
-            if doc.allegato and os.path.exists(doc.allegato):
-                with open(doc.allegato, "rb") as f:
-                    b64 = base64.b64encode(f.read()).decode()
-                    ext = os.path.splitext(doc.allegato)[1][1:]
-                    href = f'<a href="data:application/{ext};base64,{b64}" download="{os.path.basename(doc.allegato)}">📎 Scarica allegato</a>'
-                    st.markdown(href, unsafe_allow_html=True)
+if docs_filtrati:
+    df_docs = pd.DataFrame([vars(d) for d in docs_filtrati])
+    fatturato_totale = df_docs["importo"].sum()
+    media_per_tipo = df_docs.groupby("tipo")["importo"].mean().round(2)
+
+    st.metric("💰 Totale documenti", f"{fatturato_totale:,.2f} €")
+    st.write("📈 Media importo per tipo:")
+    st.dataframe(media_per_tipo.reset_index().rename(columns={"tipo": "Tipo", "importo": "Media Importo (€)"}))
+
+    # 📥 Esportazione Excel
+    st.subheader("⬇️ Esporta dati")
+    buffer = io.BytesIO()
+    df_docs.to_excel(buffer, index=False)
+    buffer.seek(0)
+    st.download_button("📤 Scarica Excel", buffer, file_name="documenti_filtrati.xlsx")
+
+    # 📑 Elenco documenti
+    st.subheader("📋 Documenti filtrati")
+    st.dataframe(df_docs, use_container_width=True)
 else:
-    st.info("Nessun documento registrato.")
+    st.info("Nessun documento trovato per i criteri selezionati.")
