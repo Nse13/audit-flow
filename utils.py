@@ -274,49 +274,54 @@ def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.p
     c.save()
 
 def plot_kpis(df_kpis):
-    # Separare KPI percentuali da quelli assoluti
-    df_percentuali = df_kpis[df_kpis["KPI"].str.contains("%")]
-    df_assoluti = df_kpis[~df_kpis["KPI"].str.contains("%")]
+   # Separare KPI percentuali da quelli assoluti
+df_percentuali = df_kpis[df_kpis["KPI"].str.contains("%")]
+df_assoluti = df_kpis[~df_kpis["KPI"].str.contains("%")]
 
-    if not df_percentuali.empty:
-        fig_percentuali = px.bar(
-            df_percentuali,
-            x="KPI",
-            y="Valore",
-            title="📊 KPI Percentuali",
-            text="Valore"
-        )
-        fig_percentuali.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
-        fig_percentuali.update_layout(
-            yaxis_title="Percentuale",
-            showlegend=False,
-            height=500,
-            margin=dict(l=20, r=20, t=40, b=100)
-        )
-    else:
-        fig_percentuali = go.Figure()
-        fig_percentuali.update_layout(title="📊 Nessun KPI Percentuale disponibile")
+# KPI Percentuali
+if not df_percentuali.empty:
+    fig_percentuali = px.bar(
+        df_percentuali,
+        x="KPI",
+        y="Valore",
+        title="📊 KPI Percentuali",
+        text="Valore"
+    )
+    fig_percentuali.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+else:
+    fig_percentuali = go.Figure()
+    fig_percentuali.update_layout(title="📊 Nessun KPI Percentuale disponibile")
 
-    if not df_assoluti.empty:
-        fig_assoluti = px.bar(
-            df_assoluti,
-            x="KPI",
-            y="Valore",
-            title="📊 KPI Valori Assoluti",
-            text="Valore"
-        )
-        fig_assoluti.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-        fig_assoluti.update_layout(
-            yaxis_title="Valore",
-            showlegend=False,
-            height=500,
-            margin=dict(l=20, r=20, t=40, b=100)
-        )
-    else:
-        fig_assoluti = go.Figure()
-        fig_assoluti.update_layout(title="📊 Nessun KPI Assoluto disponibile")
+fig_percentuali.update_layout(
+    yaxis_title="Percentuale",
+    showlegend=False,
+    height=500,
+    margin=dict(l=20, r=20, t=40, b=100)
+)
 
-    return fig_percentuali, fig_assoluti
+# KPI Assoluti
+if not df_assoluti.empty:
+    fig_assoluti = px.bar(
+        df_assoluti,
+        x="KPI",
+        y="Valore",
+        title="📊 KPI Valori Assoluti",
+        text="Valore"
+    )
+    fig_assoluti.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+else:
+    fig_assoluti = go.Figure()
+    fig_assoluti.update_layout(title="📊 Nessun KPI Assoluto disponibile")
+
+fig_assoluti.update_layout(
+    yaxis_title="Valore",
+    showlegend=False,
+    height=500,
+    margin=dict(l=20, r=20, t=40, b=100)
+)
+
+return fig_percentuali, fig_assoluti
+
 def genera_commento_ai(data):
     import openai
     openai.api_key = os.environ.get("OPENAI_API_KEY")
