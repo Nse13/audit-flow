@@ -7,7 +7,7 @@ import json
 import re
 import difflib
 
-# OCR support
+# OCR
 OCR_AVAILABLE = False
 try:
     import pytesseract
@@ -17,7 +17,6 @@ try:
 except ImportError:
     pass
 
-# === Apprendimento Progressivo ===
 CONFIRMATION_DB = "confermati.json"
 
 def salva_valore_confermato(chiave, testo, valore):
@@ -41,27 +40,6 @@ def check_valori_confermati(text, chiave):
         if c.get("testo") and c["testo"] in text:
             return c["valore"]
     return None
-
-def get_statistiche_confermate():
-    if not os.path.exists(CONFIRMATION_DB):
-        return {}
-    with open(CONFIRMATION_DB) as f:
-        db = json.load(f)
-    return {k: len(v) for k, v in db.items()}
-
-def is_valore_confermato(text, chiave):
-    if not os.path.exists(CONFIRMATION_DB):
-        return False
-    with open(CONFIRMATION_DB) as f:
-        db = json.load(f)
-    for c in db.get(chiave, []):
-        if c.get("testo") and c["testo"] in text:
-            return True
-    return False
-
-
-
-
 
 def smart_extract_value(keyword, synonyms, text, return_debug=False):
     candidates = []
@@ -123,30 +101,21 @@ def smart_extract_value(keyword, synonyms, text, return_debug=False):
         return best
     return best[0] if best else {"valore": 0.0, "score": 0, "riga": ""}
 
-
-
-
-
-
-
-
 def extract_all_values_smart(text, return_debug=False):
     keywords_map = {
-        # Conto economico
-        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues", "Total revenues", "Revenues"],
-        "Costi": ["Costi totali", "Spese", "Costi operativi", "Oneri", "Total expenses"],
-        "Utile Netto": ["Risultato netto", "Utile dell'esercizio", "Risultato d'esercizio", "Profit", "Net income", "Net profit"],
+        "Ricavi": ["Totale ricavi", "Vendite", "Ricavi netti", "Revenue", "Proventi", "Net revenues"],
+        "Costi": ["Costi totali", "Spese", "Oneri", "Total expenses"],
+        "Utile Netto": ["Risultato netto", "Utile esercizio", "Net income", "Profit"],
         "EBITDA": ["EBITDA", "Margine operativo lordo"],
-        "EBIT": ["EBIT", "Risultato operativo", "Operating income", "Operating profit", "Adjusted operating income", "AOI"],
-        "Cash Flow Operativo": ["Cash Flow Operativo", "Operating cash flow", "Flusso di cassa operativo", "Net cash from operating activities"],
+        "EBIT": ["EBIT", "Risultato operativo", "Operating income"],
+        "Cash Flow Operativo": ["Flusso di cassa operativo", "Operating cash flow"],
 
-        # Stato patrimoniale
-        "Totale Attivo": ["Totale attivo", "Attività totali", "Total Assets"],
+        "Totale Attivo": ["Totale attivo", "Total assets"],
         "Attivo Corrente": ["Attivo corrente", "Current assets"],
-        "Patrimonio Netto": ["Capitale proprio", "Patrimonio netto", "Net Equity", "Total equity", "Equity"],
+        "Patrimonio Netto": ["Capitale proprio", "Net equity"],
         "Debiti a Breve": ["Debiti a breve", "Current liabilities"],
-        "Debiti a Lungo": ["Debiti a lungo", "Long-term debt", "Debiti finanziari a lungo termine"],
-        "Cash Equivalents": ["Disponibilità liquide", "Cash and cash equivalents", "Liquidità"]
+        "Debiti a Lungo": ["Debiti a lungo", "Long-term debt"],
+        "Cash Equivalents": ["Disponibilità liquide", "Cash and cash equivalents"]
     }
 
     risultati = {}
@@ -159,14 +128,12 @@ def extract_all_values_smart(text, return_debug=False):
         else:
             estratto = smart_extract_value(key, synonyms, text, return_debug=return_debug)
             if return_debug:
-                debug_righe[key] = estratto  # lista di righe candidate
+                debug_righe[key] = estratto
                 risultati[key] = estratto[0]["valore"] if estratto else 0.0
             else:
                 risultati[key] = estratto["valore"]
 
     return (risultati, debug_righe) if return_debug else risultati
-
-
 
 def extract_financial_data(file_path, return_debug=False):
     debug_info = {}
@@ -214,24 +181,7 @@ def extract_financial_data(file_path, return_debug=False):
         except Exception as e:
             debug_info["errore"] = f"Errore apertura file testo: {str(e)}"
 
-    elif file_path.endswith(".docx"):
-        try:
-            import docx
-            doc = docx.Document(file_path)
-            text = "\n".join([para.text for para in doc.paragraphs])
-            debug_info["estratto"] = text[:2000]
-            data, debug_righe = extract_all_values_smart(text, return_debug=True)
-            debug_info["righe_candidate"] = debug_righe
-        except Exception as e:
-            debug_info["errore"] = f"Errore lettura Word: {str(e)}"
-
-    else:
-        estensione = os.path.splitext(file_path)[1]
-        debug_info["errore"] = f"⚠️ Formato non supportato: {estensione if estensione else 'nessuna estensione rilevata'}"
-
     return (data, debug_info) if return_debug else data
-
-
 
 def calculate_kpis(data):
     ricavi = data.get("Ricavi", 0)
@@ -247,62 +197,34 @@ def calculate_kpis(data):
     ebitda = data.get("EBITDA", 0)
     ebit = data.get("EBIT", 0)
     oneri_fin = data.get("Oneri Finanziari", 1)
-    proventi_fin = data.get("Proventi Finanziari", 0)
 
     kpis = {
-        # Redditività
         "Margine Operativo (%)": round((ricavi - costi) / ricavi * 100, 2) if ricavi else 0,
         "EBITDA Margin (%)": round(ebitda / ricavi * 100, 2) if ricavi else 0,
         "EBIT Margin (%)": round(ebit / ricavi * 100, 2) if ricavi else 0,
         "Return on Equity (ROE)": round(utile / pn * 100, 2) if pn else 0,
         "Return on Assets (ROA)": round(utile / attivo * 100, 2) if attivo else 0,
-
-        # Liquidità e solvibilità
         "Current Ratio": round(attivo_corrente / debiti_brevi, 2) if debiti_brevi else 0,
         "Cash Ratio": round(cash_equivalents / debiti_brevi, 2) if debiti_brevi else 0,
-
-        # Leva finanziaria
         "Debt to Equity": round((debiti_brevi + debiti_lunghi) / pn, 2) if pn else 0,
         "Debt to Assets": round((debiti_brevi + debiti_lunghi) / attivo, 2) if attivo else 0,
-
-        # Efficienza
         "Indice di Efficienza (%)": round(utile / costi * 100, 2) if costi else 0,
         "Ricavi / Totale Attivo": round(ricavi / attivo, 2) if attivo else 0,
         "Copertura Interessi": round(ebit / oneri_fin, 2) if oneri_fin else 0,
-
-        # Cash Flow
         "Cash Flow su Utile Netto": round(cash_flow / utile, 2) if utile else 0,
         "Cash Flow su Ricavi": round(cash_flow / ricavi, 2) if ricavi else 0,
         "Cash Flow Margin (%)": round(cash_flow / ricavi * 100, 2) if ricavi else 0,
-
-        # Indicatori personalizzati
         "Capacità di autofinanziamento": round((utile + cash_flow) / ricavi * 100, 2) if ricavi else 0,
         "Indice di solidità patrimoniale": round(pn / attivo, 2) if attivo else 0,
         "Margine di struttura": round(pn - debiti_lunghi, 2)
     }
-
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
-
 def plot_kpis(df_kpis):
-    fig = px.bar(
-        df_kpis,
-        x="KPI",
-        y="Valore",
-        title="📊 KPI Finanziari",
-        text="Valore"
-    )
-    fig.update_traces(
-        texttemplate='%{text:.2f}',
-        textposition='outside'
-    )
-    fig.update_layout(
-        yaxis_title="Valore",
-        xaxis_title="",
-        showlegend=False,
-        height=600,
-        margin=dict(l=20, r=20, t=50, b=100)
-    )
+    fig = px.bar(df_kpis, x="KPI", y="Valore", title="📊 KPI Finanziari", text="Valore")
+    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+    fig.update_layout(yaxis_title="Valore", xaxis_title="", showlegend=False, height=600,
+                      margin=dict(l=20, r=20, t=50, b=100))
     return fig
 
 from reportlab.lib.pagesizes import A4
@@ -348,16 +270,13 @@ def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.p
             if y < 60:
                 c.showPage()
                 y = height - 50
-
     c.save()
 
 def genera_commento_ai(data):
     import openai
     openai.api_key = os.environ.get("OPENAI_API_KEY")
-
     if not openai.api_key:
         return "⚠️ Nessuna API key trovata. Impossibile generare commento."
-
     prompt = f"""
 Sei un revisore contabile esperto. Analizza i seguenti dati estratti da un bilancio e fornisci una breve valutazione finanziaria:
 
@@ -371,7 +290,6 @@ Concentrati su:
 
 Scrivi in modo professionale e sintetico.
 """
-
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
