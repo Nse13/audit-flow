@@ -3,7 +3,14 @@
 import streamlit as st
 import tempfile
 import os
-from utils import extract_financial_data, calculate_kpis, plot_kpis, generate_pdf_report, genera_commento_ai
+
+from utils import (
+    extract_financial_data,
+    calculate_kpis,
+    plot_kpis,
+    generate_pdf_report,
+    genera_commento_ai
+)
 
 st.set_page_config(page_title="Audit Flow+", layout="wide")
 st.title("📊 Audit Flow+ - Analisi Automatica del Bilancio")
