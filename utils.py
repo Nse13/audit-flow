@@ -220,52 +220,7 @@ def calculate_kpis(data):
     }
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
-def plot_kpis(df_kpis):
-    # Separare i KPI percentuali e assoluti
-    df_percentuali = df_kpis[df_kpis['KPI'].str.contains('%')]
-    df_assoluti = df_kpis[~df_kpis['KPI'].str.contains('%')]
 
-    # Grafico per KPI percentuali
-    fig_percentuali = px.bar(
-        df_percentuali,
-        x="KPI",
-        y="Valore",
-        title="📊 KPI Percentuali",
-        text="Valore"
-    )
-    fig_percentuali.update_traces(
-        texttemplate='%{text:.2f}%',
-        textposition='outside'
-    )
-    fig_percentuali.update_layout(
-        yaxis_title="Percentuale",
-        xaxis_title="",
-        showlegend=False,
-        height=600,
-        margin=dict(l=20, r=20, t=50, b=100)
-    )
-
-    # Grafico per KPI assoluti
-    fig_assoluti = px.bar(
-        df_assoluti,
-        x="KPI",
-        y="Valore",
-        title="📊 KPI Assoluti",
-        text="Valore"
-    )
-    fig_assoluti.update_traces(
-        texttemplate='%{text:.2f}',
-        textposition='outside'
-    )
-    fig_assoluti.update_layout(
-        yaxis_title="Valore",
-        xaxis_title="",
-        showlegend=False,
-        height=600,
-        margin=dict(l=20, r=20, t=50, b=100)
-    )
-
-    return fig_percentuali, fig_assoluti
 
 
 def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.pdf"):
@@ -283,6 +238,42 @@ def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.p
         if y < 60:
             c.showPage()
             y = height - 50
+def plot_kpis(df_kpis):
+    # Separare KPI percentuali da quelli assoluti
+    df_percentuali = df_kpis[df_kpis["KPI"].str.contains("%")]
+    df_assoluti = df_kpis[~df_kpis["KPI"].str.contains("%")]
+
+    fig_percentuali = px.bar(
+        df_percentuali,
+        x="KPI",
+        y="Valore",
+        title="📊 KPI Percentuali",
+        text="Valore"
+    )
+    fig_percentuali.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+    fig_percentuali.update_layout(
+        yaxis_title="Percentuale",
+        showlegend=False,
+        height=500,
+        margin=dict(l=20, r=20, t=40, b=100)
+    )
+
+    fig_assoluti = px.bar(
+        df_assoluti,
+        x="KPI",
+        y="Valore",
+        title="📊 KPI Valori Assoluti",
+        text="Valore"
+    )
+    fig_assoluti.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+    fig_assoluti.update_layout(
+        yaxis_title="Valore",
+        showlegend=False,
+        height=500,
+        margin=dict(l=20, r=20, t=40, b=100)
+    )
+
+    return fig_percentuali, fig_assoluti
 
     y -= 20
     c.setFont("Helvetica-Bold", 13)
