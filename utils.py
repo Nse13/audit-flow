@@ -223,6 +223,9 @@ def calculate_kpis(data):
 
 
 def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.pdf"):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
     c = canvas.Canvas(filename, pagesize=A4)
     width, height = A4
 
@@ -237,6 +240,35 @@ def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.p
         if y < 60:
             c.showPage()
             y = height - 50
+
+    y -= 20
+    c.setFont("Helvetica-Bold", 13)
+    c.drawString(40, y, "📈 KPI Calcolati")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    for _, row in df_kpis.iterrows():
+        valore = f"{row['Valore']:.2f}%️" if "%" in row["KPI"] else f"{row['Valore']:.2f}"
+        c.drawString(50, y, f"{row['KPI']}: {valore}")
+        y -= 15
+        if y < 60:
+            c.showPage()
+            y = height - 50
+
+    if commento:
+        y -= 30
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(40, y, "🧠 Commento AuditLLM")
+        y -= 20
+        c.setFont("Helvetica", 9)
+        for line in commento.split("\n"):
+            c.drawString(50, y, line)
+            y -= 13
+            if y < 60:
+                c.showPage()
+                y = height - 50
+
+    c.save()
+
 def plot_kpis(df_kpis):
     # Separare KPI percentuali da quelli assoluti
     df_percentuali = df_kpis[df_kpis["KPI"].str.contains("%")]
