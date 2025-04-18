@@ -1,4 +1,6 @@
 # --- utils.py ---
+import fitz  # PyMuPDF per lettura PDF
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
