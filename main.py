@@ -12,6 +12,7 @@ from utils import (
     genera_commento_ai
 )
 
+
 st.set_page_config(page_title="Audit Flow+", layout="wide")
 st.title("📊 Audit Flow+ - Analisi Automatica del Bilancio")
 
