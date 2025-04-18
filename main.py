@@ -3,6 +3,7 @@
 import streamlit as st
 import tempfile
 import os
+
 from utils import (
     extract_financial_data,
     calculate_kpis,
@@ -11,11 +12,13 @@ from utils import (
     genera_commento_ai
 )
 
-
 st.set_page_config(page_title="Audit Flow+", layout="wide")
 st.title("📊 Audit Flow+ - Analisi Automatica del Bilancio")
 
-uploaded_file = st.file_uploader("📁 Carica un bilancio (PDF, Excel, Word, testo)", type=["pdf", "xlsx", "xls", "csv", "txt", "docx"])
+uploaded_file = st.file_uploader(
+    "📁 Carica un bilancio (PDF, Excel, Word, testo)",
+    type=["pdf", "xlsx", "xls", "csv", "txt", "docx"]
+)
 
 if uploaded_file is not None:
     # Ricava estensione vera
