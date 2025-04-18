@@ -1,11 +1,10 @@
 # --- utils.py ---
-import fitz  # PyMuPDF
 import pandas as pd
 import plotly.express as px
-import os
-import json
-import re
-import difflib
+import plotly.graph_objects as go
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+
 
 # OCR
 OCR_AVAILABLE = False
@@ -243,37 +242,46 @@ def plot_kpis(df_kpis):
     df_percentuali = df_kpis[df_kpis["KPI"].str.contains("%")]
     df_assoluti = df_kpis[~df_kpis["KPI"].str.contains("%")]
 
-    fig_percentuali = px.bar(
-        df_percentuali,
-        x="KPI",
-        y="Valore",
-        title="📊 KPI Percentuali",
-        text="Valore"
-    )
-    fig_percentuali.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
-    fig_percentuali.update_layout(
-        yaxis_title="Percentuale",
-        showlegend=False,
-        height=500,
-        margin=dict(l=20, r=20, t=40, b=100)
-    )
+    if not df_percentuali.empty:
+        fig_percentuali = px.bar(
+            df_percentuali,
+            x="KPI",
+            y="Valore",
+            title="📊 KPI Percentuali",
+            text="Valore"
+        )
+        fig_percentuali.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+        fig_percentuali.update_layout(
+            yaxis_title="Percentuale",
+            showlegend=False,
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=100)
+        )
+    else:
+        fig_percentuali = go.Figure()
+        fig_percentuali.update_layout(title="📊 Nessun KPI Percentuale disponibile")
 
-    fig_assoluti = px.bar(
-        df_assoluti,
-        x="KPI",
-        y="Valore",
-        title="📊 KPI Valori Assoluti",
-        text="Valore"
-    )
-    fig_assoluti.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-    fig_assoluti.update_layout(
-        yaxis_title="Valore",
-        showlegend=False,
-        height=500,
-        margin=dict(l=20, r=20, t=40, b=100)
-    )
+    if not df_assoluti.empty:
+        fig_assoluti = px.bar(
+            df_assoluti,
+            x="KPI",
+            y="Valore",
+            title="📊 KPI Valori Assoluti",
+            text="Valore"
+        )
+        fig_assoluti.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+        fig_assoluti.update_layout(
+            yaxis_title="Valore",
+            showlegend=False,
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=100)
+        )
+    else:
+        fig_assoluti = go.Figure()
+        fig_assoluti.update_layout(title="📊 Nessun KPI Assoluto disponibile")
 
     return fig_percentuali, fig_assoluti
+
 
     y -= 20
     c.setFont("Helvetica-Bold", 13)
