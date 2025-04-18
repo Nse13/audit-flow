@@ -221,14 +221,52 @@ def calculate_kpis(data):
     return pd.DataFrame(list(kpis.items()), columns=["KPI", "Valore"])
 
 def plot_kpis(df_kpis):
-    fig = px.bar(df_kpis, x="KPI", y="Valore", title="📊 KPI Finanziari", text="Valore")
-    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-    fig.update_layout(yaxis_title="Valore", xaxis_title="", showlegend=False, height=600,
-                      margin=dict(l=20, r=20, t=50, b=100))
-    return fig
+    # Separare i KPI percentuali e assoluti
+    df_percentuali = df_kpis[df_kpis['KPI'].str.contains('%')]
+    df_assoluti = df_kpis[~df_kpis['KPI'].str.contains('%')]
 
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+    # Grafico per KPI percentuali
+    fig_percentuali = px.bar(
+        df_percentuali,
+        x="KPI",
+        y="Valore",
+        title="📊 KPI Percentuali",
+        text="Valore"
+    )
+    fig_percentuali.update_traces(
+        texttemplate='%{text:.2f}%',
+        textposition='outside'
+    )
+    fig_percentuali.update_layout(
+        yaxis_title="Percentuale",
+        xaxis_title="",
+        showlegend=False,
+        height=600,
+        margin=dict(l=20, r=20, t=50, b=100)
+    )
+
+    # Grafico per KPI assoluti
+    fig_assoluti = px.bar(
+        df_assoluti,
+        x="KPI",
+        y="Valore",
+        title="📊 KPI Assoluti",
+        text="Valore"
+    )
+    fig_assoluti.update_traces(
+        texttemplate='%{text:.2f}',
+        textposition='outside'
+    )
+    fig_assoluti.update_layout(
+        yaxis_title="Valore",
+        xaxis_title="",
+        showlegend=False,
+        height=600,
+        margin=dict(l=20, r=20, t=50, b=100)
+    )
+
+    return fig_percentuali, fig_assoluti
+
 
 def generate_pdf_report(data, df_kpis, commento="", filename="report_auditflow.pdf"):
     c = canvas.Canvas(filename, pagesize=A4)
