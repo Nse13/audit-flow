@@ -1,3 +1,5 @@
+# --- pages/1_Analisi_Bilanci.py ---
+
 import streamlit as st
 import os
 import sys
@@ -19,10 +21,7 @@ st.title("📊 Analisi Bilanci Avanzata")
 uploaded_file = st.file_uploader("Carica bilancio PDF, Excel, TXT o CSV", type=["pdf", "xlsx", "xls", "txt", "csv"])
 use_debug = st.checkbox("📌 Mostra debug")
 use_llm = st.checkbox("🤖 Usa AuditLLM (se attivo)")
-
 debug = {}
-data = {}
-updated_data = {}
 
 if uploaded_file:
     file_ext = os.path.splitext(uploaded_file.name)[1]
@@ -33,7 +32,8 @@ if uploaded_file:
     data, debug = extract_financial_data(file_path, return_debug=True)
 
     st.subheader("📄 Dati suggeriti e righe candidate")
-    for key, righe in debug.get("righe_candidate", {}).items():
+    updated_data = {}
+    for key, righe in debug.items():
         if isinstance(righe, list) and all(isinstance(r, dict) and "valore" in r and "riga" in r for r in righe):
             st.markdown(f"#### 🔹 {key}")
             opzioni = [f"{r['valore']:,.2f} — {r['riga']}" for r in righe]
@@ -43,21 +43,27 @@ if uploaded_file:
                 testo = scelta.split("—")[1].strip()
                 salva_valore_confermato(key, testo, valore_scelto)
                 updated_data[key] = valore_scelto
+        else:
+            updated_data[key] = debug.get(key, 0)
 
     st.subheader("✏️ Correggi manualmente i valori:")
     for k, v in data.items():
-        new_val = st.text_input(f"{k}:", value=str(updated_data.get(k, v)))
+        new_val = st.text_input(f"{k}:", value=str(v))
         try:
             updated_data[k] = float(new_val)
             if new_val != str(v):
-                salva_valore_confermato(k, f"{k}: {new_val}", new_val)
+                salva_valore_confermato(k, f"{k}: {new_val}", float(new_val))
         except:
             st.warning(f"⚠️ Valore non valido per {k}")
 
     st.subheader("📈 KPI Calcolati")
     df_kpis = calculate_kpis(updated_data)
     st.dataframe(df_kpis)
-    st.plotly_chart(plot_kpis(df_kpis))
+
+    # Plot KPI separati (percentuali vs assoluti)
+    fig_percentuali, fig_assoluti = plot_kpis(df_kpis)
+    st.plotly_chart(fig_percentuali, use_container_width=True)
+    st.plotly_chart(fig_assoluti, use_container_width=True)
 
     commento = ""
     if use_llm:
@@ -77,8 +83,11 @@ if uploaded_file:
         for k, v in updated_data.items():
             simulato = st.number_input(f"{k} simulato:", value=v)
             dati_sim[k] = simulato
-        st.dataframe(calculate_kpis(dati_sim))
-        st.plotly_chart(plot_kpis(calculate_kpis(dati_sim)))
+        df_sim = calculate_kpis(dati_sim)
+        st.dataframe(df_sim)
+        fig_percentuali_sim, fig_assoluti_sim = plot_kpis(df_sim)
+        st.plotly_chart(fig_percentuali_sim, use_container_width=True)
+        st.plotly_chart(fig_assoluti_sim, use_container_width=True)
 
     if st.checkbox("📂 Confronta più bilanci"):
         uploaded_files = st.file_uploader("Carica più bilanci", type=["pdf", "xlsx"], accept_multiple_files=True)
@@ -93,11 +102,17 @@ if uploaded_file:
 
         if dati_annuali:
             st.subheader("📊 Confronto KPI tra anni / aziende")
-            for nome, dati in dati_annuali.items():
-                st.markdown(f"#### 📁 {nome}")
-                df = calculate_kpis(dati)
-                st.dataframe(df)
+            for nome, valori in dati_annuali.items():
+                st.markdown(f"#### 🔸 {nome}")
+                df_confronto = calculate_kpis(valori)
+                st.dataframe(df_confronto)
+                fig_perc, fig_ass = plot_kpis(df_confronto)
+                st.plotly_chart(fig_perc, use_container_width=True)
+                st.plotly_chart(fig_ass, use_container_width=True)
 
     if use_debug:
         st.subheader("🔍 Debug - Testo grezzo estratto")
-        st.json(debug.get("estratto", "Nessun testo disponibile"))
+        st.json(debug)
+
+else:
+    st.info("📁 Carica un bilancio per iniziare l'analisi.")
