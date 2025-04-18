@@ -313,34 +313,6 @@ def plot_kpis(df_kpis):
         fig_assoluti.update_layout(title="📊 Nessun KPI Assoluto disponibile")
 
     return fig_percentuali, fig_assoluti
-
-
-    y -= 20
-    c.setFont("Helvetica-Bold", 13)
-    c.drawString(40, y, "📈 KPI Calcolati")
-    y -= 20
-    c.setFont("Helvetica", 10)
-    for _, row in df_kpis.iterrows():
-        c.drawString(50, y, f"{row['KPI']}: {row['Valore']}")
-        y -= 15
-        if y < 60:
-            c.showPage()
-            y = height - 50
-
-    if commento:
-        y -= 30
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(40, y, "🧠 Commento AuditLLM")
-        y -= 20
-        c.setFont("Helvetica", 9)
-        for line in commento.split("\n"):
-            c.drawString(50, y, line)
-            y -= 13
-            if y < 60:
-                c.showPage()
-                y = height - 50
-    c.save()
-
 def genera_commento_ai(data):
     import openai
     openai.api_key = os.environ.get("OPENAI_API_KEY")
