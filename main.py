@@ -1,3 +1,5 @@
+# --- main.py ---
+
 import streamlit as st
 import tempfile
 import os
@@ -36,7 +38,9 @@ if uploaded_file is not None:
         st.subheader("📈 KPI Calcolati")
         df_kpis = calculate_kpis(data)
         st.dataframe(df_kpis)
-        fig1, fig2 = plot_kpis(df_kpis) st.plotly_chart(fig1, use_container_width=True) 
+
+        fig1, fig2 = plot_kpis(df_kpis)
+        st.plotly_chart(fig1, use_container_width=True)
         st.plotly_chart(fig2, use_container_width=True)
 
         commento = ""
