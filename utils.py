@@ -1,12 +1,14 @@
 # --- utils.py ---
+import os
+import json
+import re
+import difflib
 import fitz  # PyMuPDF per lettura PDF
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-
 
 # OCR
 OCR_AVAILABLE = False
